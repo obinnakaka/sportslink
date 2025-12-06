@@ -227,7 +227,6 @@ function AuthScreen({ signIn, signUp, resetPassword }) {
         if (result?.error) {
           const raw = result.error.message || "";
           const lower = raw.toLowerCase();
-          // friendlier message when email already exists
           if (
             lower.includes("already registered") ||
             lower.includes("already exists") ||
@@ -410,7 +409,7 @@ function AuthScreen({ signIn, signUp, resetPassword }) {
 }
 
 // ---------- PROFILE VIEW ----------
-function ProfileView({ profile, onSave, email }) {
+function ProfileView({ profile, onSave, email, followerCount, followingCount }) {
   const [form, setForm] = useState({
     full_name: profile?.full_name || "",
     bio: profile?.bio || "",
@@ -463,7 +462,6 @@ function ProfileView({ profile, onSave, email }) {
       return false;
     }
 
-    // Basic DOB sanity check (no future dates)
     if (form.dob) {
       const dobDate = new Date(form.dob);
       const today = new Date();
@@ -483,7 +481,6 @@ function ProfileView({ profile, onSave, email }) {
     onSave({ ...form, photoFile });
   }
 
-  // Profile completeness (simple: count non-empty fields)
   const fieldsForCompletion = [
     "full_name",
     "bio",
@@ -507,6 +504,16 @@ function ProfileView({ profile, onSave, email }) {
   return (
     <div style={styles.container}>
       <h2>My Profile</h2>
+      <p
+        style={{
+          color: "#9ca3af",
+          fontSize: 13,
+          marginTop: 4,
+          marginBottom: 4,
+        }}
+      >
+        {followerCount} Followers • {followingCount} Following
+      </p>
       <p style={{ color: "#6b7280", marginBottom: 12 }}>
         Logged in as {email}. Complete your profile so clubs and coaches can
         quickly understand who you are.
@@ -548,9 +555,9 @@ function ProfileView({ profile, onSave, email }) {
               height: "100%",
               background:
                 completion < 50
-                  ? "#f97316" // orange
+                  ? "#f97316"
                   : completion < 80
-                  ? "#22c55e" // green
+                  ? "#22c55e"
                   : "#22c55e",
               transition: "width 0.3s ease",
             }}
@@ -558,7 +565,6 @@ function ProfileView({ profile, onSave, email }) {
         </div>
       </div>
 
-      {/* Error message */}
       {error && (
         <div
           style={{
@@ -643,7 +649,6 @@ function ProfileView({ profile, onSave, email }) {
           placeholder="e.g. City United Abuja"
         />
 
-        {/* Height / weight / preferred foot in one row */}
         <div
           style={{
             display: "grid",
@@ -808,15 +813,15 @@ function FeedView({
 
 // ---------- SEARCH VIEW ----------
 function SearchView(props) {
-  // support either props.profiles or props.allProfiles + optional currentUserId
   const {
-  profiles,
-  allProfiles,
-  currentUserId,
-  onOpenProfile,
-  followingIds = [],
-  onToggleFollow,
-} = props;
+    profiles,
+    allProfiles,
+    currentUserId,
+    onOpenProfile,
+    followingIds = [],
+    onToggleFollow,
+    onFavoriteNotification,
+  } = props;
 
   const baseList = (profiles || allProfiles || []).filter(
     (p) => p && p.id && p.id !== currentUserId
@@ -827,12 +832,11 @@ function SearchView(props) {
   const [nationality, setNationality] = useState("");
   const [minAge, setMinAge] = useState("");
   const [maxAge, setMaxAge] = useState("");
-  const [sortBy, setSortBy] = useState("nameAsc"); // nameAsc | ageAsc | ageDesc | position | club
+  const [sortBy, setSortBy] = useState("nameAsc");
 
   const [favorites, setFavorites] = useState([]);
   const [savedSearches, setSavedSearches] = useState([]);
 
-  // Load favorites + saved searches from localStorage (so they persist)
   useEffect(() => {
     try {
       const favRaw = window.localStorage.getItem("sl_favorites");
@@ -864,13 +868,19 @@ function SearchView(props) {
   }, [savedSearches]);
 
   function toggleFavorite(id) {
-    setFavorites((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-    );
+    setFavorites((prev) => {
+      const isFav = prev.includes(id);
+      const next = isFav ? prev.filter((x) => x !== id) : [...prev, id];
+
+      if (!isFav && typeof onFavoriteNotification === "function") {
+        onFavoriteNotification(id);
+      }
+
+      return next;
+    });
   }
 
   function handleSaveSearch() {
-    // If no filters at all, don't save
     if (
       !query.trim() &&
       !position &&
@@ -914,7 +924,7 @@ function SearchView(props) {
       sortBy,
     };
 
-    setSavedSearches((prev) => [newSearch, ...prev].slice(0, 10)); // keep last 10
+    setSavedSearches((prev) => [newSearch, ...prev].slice(0, 10));
   }
 
   function applySavedSearch(saved) {
@@ -926,10 +936,8 @@ function SearchView(props) {
     setSortBy(saved.sortBy || "nameAsc");
   }
 
-  // ---- Filtering ----
   const filtered = baseList.filter((p) => {
-    const name =
-      p.full_name || p.username || p.email || "";
+    const name = p.full_name || p.username || p.email || "";
     const club = p.club || "";
     const pos = p.position || "";
     const nat = p.nationality || "";
@@ -955,7 +963,6 @@ function SearchView(props) {
       return false;
     }
 
-    // Age filter
     const age = calculateAge(p.dob);
     const ageIsNumber =
       typeof age === "number" && !Number.isNaN(age);
@@ -967,14 +974,9 @@ function SearchView(props) {
       return false;
     }
 
-    // If age is missing and age filter is set, we keep them by default.
-    // If you prefer to hide players without DOB when age filter is used,
-    // you could change this logic.
-
     return true;
   });
 
-  // ---- Sorting ----
   const sorted = [...filtered].sort((a, b) => {
     const nameA =
       (a.full_name || a.username || a.email || "").toLowerCase();
@@ -1005,7 +1007,6 @@ function SearchView(props) {
       return nameA.localeCompare(nameB);
     }
 
-    // default: nameAsc
     return nameA.localeCompare(nameB);
   });
 
@@ -1021,7 +1022,8 @@ function SearchView(props) {
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "minmax(0,2.5fr) minmax(0,1.2fr) minmax(0,1.2fr) minmax(0,1fr) minmax(0,1fr)",
+          gridTemplateColumns:
+            "minmax(0,2.5fr) minmax(0,1.2fr) minmax(0,1.2fr) minmax(0,1fr) minmax(0,1fr)",
           gap: 8,
           marginBottom: 8,
         }}
@@ -1195,9 +1197,17 @@ function SearchView(props) {
                         fontWeight: 600,
                         marginBottom: 2,
                         fontSize: 15,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 4,
                       }}
                     >
-                      {p.full_name || p.username || p.email}
+                      <span>{p.full_name || p.username || p.email}</span>
+                      {p.verified && (
+                        <span style={{ color: "#3b82f6", fontSize: 14 }}>
+                          ✔
+                        </span>
+                      )}
                     </div>
                     <div
                       style={{
@@ -1221,56 +1231,59 @@ function SearchView(props) {
                     </div>
                   </div>
                   <div
-  style={{
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "flex-end",
-    gap: 6,
-  }}
->
-  {/* Follow / Following button */}
-  <button
-    type="button"
-    onClick={(e) => {
-      e.stopPropagation();
-      onToggleFollow && onToggleFollow(p.id);
-    }}
-    style={{
-      padding: "4px 10px",
-      borderRadius: 999,
-      border: "1px solid #22c55e",
-      background: isFollowing ? "#22c55e" : "transparent",
-      color: isFollowing ? "#020617" : "#bbf7d0",
-      fontSize: 11,
-      cursor: "pointer",
-      fontWeight: 600,
-    }}
-  >
-    {isFollowing ? "Following" : "Follow"}
-  </button>
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "flex-end",
+                      gap: 6,
+                    }}
+                  >
+                    {/* Follow / Following button */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onToggleFollow && onToggleFollow(p.id);
+                      }}
+                      style={{
+                        padding: "4px 10px",
+                        borderRadius: 999,
+                        border: "1px solid #22c55e",
+                        background: isFollowing ? "#22c55e" : "transparent",
+                        color: isFollowing ? "#020617" : "#bbf7d0",
+                        fontSize: 11,
+                        cursor: "pointer",
+                        fontWeight: 600,
+                      }}
+                    >
+                      {isFollowing ? "Following" : "Follow"}
+                    </button>
 
-  {/* Favourite star button */}
-  <button
-    type="button"
-    onClick={(e) => {
-      e.stopPropagation(); // don’t open profile when toggling favorite
-      toggleFavorite(p.id);
-    }}
-    style={{
-      background: "none",
-      border: "none",
-      cursor: "pointer",
-      fontSize: 18,
-      color: "#facc15",
-    }}
-    title={
-      isFavorite ? "Remove from favourites" : "Add to favourites"
-    }
-  >
-    {isFavorite ? "★" : "☆"}
-  </button>
-</div>
-
+                    {/* Favourite star button */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleFavorite(p.id);
+                      }}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        fontSize: 20,
+                        color: isFavorite ? "#facc15" : "#e5e7eb",
+                        minWidth: 24,
+                        minHeight: 24,
+                      }}
+                      title={
+                        isFavorite
+                          ? "Remove from favourites"
+                          : "Add to favourites"
+                      }
+                    >
+                      {isFavorite ? "★" : "☆"}
+                    </button>
+                  </div>
                 </div>
 
                 {p.bio && (
@@ -1295,7 +1308,7 @@ function SearchView(props) {
   );
 }
 
-// ---------- MESSAGES VIEW (SUPABASE-BACKED) ----------
+// ---------- MESSAGES VIEW ----------
 function MessagesView({ profiles, currentUserId, messages, onSendMessage }) {
   const [selectedUserId, setSelectedUserId] = useState(null);
   const [draft, setDraft] = useState("");
@@ -1379,8 +1392,21 @@ function MessagesView({ profiles, currentUserId, messages, onSendMessage }) {
                     />
                   )}
                   <div>
-                    <div style={{ fontSize: 14, fontWeight: 500 }}>
-                      {u.full_name || u.username || u.email}
+                    <div
+                      style={{
+                        fontSize: 14,
+                        fontWeight: 500,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 4,
+                      }}
+                    >
+                      <span>{u.full_name || u.username || u.email}</span>
+                      {u.verified && (
+                        <span style={{ color: "#3b82f6", fontSize: 13 }}>
+                          ✔
+                        </span>
+                      )}
                     </div>
                     <div style={{ fontSize: 12, color: "#9ca3af" }}>
                       {u.position || ""}
@@ -1561,8 +1587,20 @@ function PublicProfileView({ profile, highlights }) {
 
       {/* MAIN HEADER */}
       <div style={{ marginTop: 80, textAlign: "center", padding: 16 }}>
-        <h1 style={{ fontSize: 26, marginBottom: 6 }}>
-          {p.full_name || p.username}
+        <h1
+          style={{
+            fontSize: 26,
+            marginBottom: 6,
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            gap: 6,
+          }}
+        >
+          <span>{p.full_name || p.username}</span>
+          {p.verified && (
+            <span style={{ color: "#3b82f6", fontSize: 20 }}>✔</span>
+          )}
         </h1>
 
         <div style={{ fontSize: 16, color: "#d1d5db", marginBottom: 2 }}>
@@ -1613,7 +1651,11 @@ function PublicProfileView({ profile, highlights }) {
               >
                 <div style={{ fontSize: 20 }}>{value}</div>
                 <div
-                  style={{ fontSize: 11, marginTop: 4, textTransform: "capitalize" }}
+                  style={{
+                    fontSize: 11,
+                    marginTop: 4,
+                    textTransform: "capitalize",
+                  }}
                 >
                   {attr}
                 </div>
@@ -1715,17 +1757,13 @@ function PublicProfileView({ profile, highlights }) {
 function App() {
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
-
-  // add this:
   const [forceLoggedOut, setForceLoggedOut] = useState(false);
 
   const [profile, setProfile] = useState(null);
   const [posts, setPosts] = useState([]);
   const [newPost, setNewPost] = useState("");
 
-  // feed | profile | publicProfile | search | messages
- const [view, setView] = useState("feed"); // feed | profile | publicProfile | search
-
+  const [view, setView] = useState("feed");
 
   const [highlights, setHighlights] = useState([]);
   const [highlightTitle, setHighlightTitle] = useState("");
@@ -1738,9 +1776,11 @@ function App() {
   const [messages, setMessages] = useState([]);
 
   const [followingIds, setFollowingIds] = useState([]);
+  const [followerCount, setFollowerCount] = useState(0);
+  const [followingCount, setFollowingCount] = useState(0);
 
-  const [favorites, setFavorites] = useState([]); // array of profile IDs
-const [savedSearches, setSavedSearches] = useState([]); // array of {id, label, query, position, nationality}
+  const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   // ---------- SUPABASE CONNECTION TEST ----------
   useEffect(() => {
@@ -1764,77 +1804,170 @@ const [savedSearches, setSavedSearches] = useState([]); // array of {id, label, 
     testSupabase();
   }, []);
 
-// ---------- AUTH ----------
-async function signIn(email, password) {
-  const { error } = await supabase.auth.signInWithPassword({
-    email,
-    password,
-  });
-  return { error };
-}
-
-async function signUp(email, password) {
-  const { error } = await supabase.auth.signUp({
-    email,
-    password,
-    options: {
-      emailRedirectTo: window.location.origin,
-    },
-  });
-  return { error };
-}
-
-async function resetPassword(email) {
-  const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: window.location.origin,
-  });
-  return { error };
-}
-
-async function signOut() {
-  try {
-    await supabase.auth.signOut({ scope: "global" });
-  } catch (error) {
-    console.error("Error signing out:", error);
+  // ---------- AUTH ----------
+  async function signIn(email, password) {
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+    return { error };
   }
 
-  // tell the app: treat user as logged out from now on
-  setForceLoggedOut(true);
+  async function signUp(email, password) {
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo: window.location.origin,
+      },
+    });
+    return { error };
+  }
 
-  // clear all local state
-  setSession(null);
-  setProfile(null);
-  setPosts([]);
-  setHighlights([]);
-  setPublicProfileUser(null);
-  setPublicProfileHighlights([]);
-  setAllProfiles([]);
-  setMessages([]);
-  setView("feed");
-}
+  async function resetPassword(email) {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin,
+    });
+    return { error };
+  }
 
-  // ---------- PROFILE ----------
- async function fetchProfile() {
-  if (!session?.user) return;
+  async function signOut() {
+    try {
+      await supabase.auth.signOut({ scope: "global" });
+    } catch (error) {
+      console.error("Error signing out:", error);
+    }
 
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("id", session.user.id)
-    .single();
+    setForceLoggedOut(true);
 
-  if (error && error.code !== "PGRST116") {
-    console.error("Error loading profile:", error);
-  } else {
-    setProfile(data);
+    setSession(null);
+    setProfile(null);
+    setPosts([]);
+    setHighlights([]);
+    setPublicProfileUser(null);
+    setPublicProfileHighlights([]);
+    setAllProfiles([]);
+    setMessages([]);
+    setFollowingIds([]);
+    setFollowerCount(0);
+    setFollowingCount(0);
+    setNotifications([]);
+    setUnreadCount(0);
+    setView("feed");
+  }
 
-    // If this looks like a brand new user (no profile yet),
-    // push them to the Profile screen so they can fill it.
-    if (!data || !data.full_name) {
-      setView("profile");
+  // ---------- NOTIFICATIONS HELPERS ----------
+  async function createNotification({ userId, actorId, type, entityId, metadata = {} }) {
+    if (!userId || !actorId || userId === actorId) return;
+
+    const { error } = await supabase.from("notifications").insert([
+      {
+        user_id: userId,
+        actor_id: actorId,
+        type,
+        entity_id: entityId || null,
+        metadata,
+      },
+    ]);
+
+    if (error) {
+      console.error("Error creating notification:", error);
     }
   }
-}
+
+  async function fetchFollowCountsForCurrentUser() {
+    if (!session?.user) return;
+    const userId = session.user.id;
+
+    const { data: followers, error: followersErr } = await supabase
+      .from("follows")
+      .select("id")
+      .eq("following_id", userId);
+
+    const { data: following, error: followingErr } = await supabase
+      .from("follows")
+      .select("id")
+      .eq("follower_id", userId);
+
+    if (!followersErr) {
+      setFollowerCount((followers || []).length);
+    }
+    if (!followingErr) {
+      setFollowingCount((following || []).length);
+    }
+  }
+
+  async function fetchNotificationsFromDb() {
+    if (!profile?.id) return;
+
+    const { data, error } = await supabase
+      .from("notifications")
+      .select("*")
+      .eq("user_id", profile.id)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Error loading notifications:", error);
+    } else {
+      const list = data || [];
+      setNotifications(list);
+      setUnreadCount(list.filter((n) => !n.read).length);
+    }
+  }
+
+  async function markAllNotificationsRead() {
+    if (!profile?.id) return;
+
+    const { error } = await supabase
+      .from("notifications")
+      .update({ read: true })
+      .eq("user_id", profile.id)
+      .eq("read", false);
+
+    if (error) {
+      console.error("Error marking notifications read:", error);
+      return;
+    }
+
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    setUnreadCount(0);
+  }
+
+  function handleFavoriteNotification(targetUserId) {
+    if (!session?.user || !profile) return;
+    if (session.user.id === targetUserId) return;
+
+    createNotification({
+      userId: targetUserId,
+      actorId: session.user.id,
+      type: "favorite",
+      entityId: targetUserId,
+      metadata: {
+        actor_name: profile.full_name || session.user.email,
+      },
+    });
+  }
+
+  // ---------- PROFILE ----------
+  async function fetchProfile() {
+    if (!session?.user) return;
+
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", session.user.id)
+      .single();
+
+    if (error && error.code !== "PGRST116") {
+      console.error("Error loading profile:", error);
+    } else {
+      setProfile(data);
+
+      if (!data || !data.full_name) {
+        setView("profile");
+      }
+    }
+  }
 
   async function saveProfile(updates) {
     if (!session?.user) return;
@@ -1882,43 +2015,6 @@ async function signOut() {
       alert("Profile saved!");
     }
   }
-
-  // ---------- SEARCH HELPERS (favorites + saved searches) ----------
-function toggleFavorite(profileId) {
-  setFavorites((prev) =>
-    prev.includes(profileId)
-      ? prev.filter((id) => id !== profileId)
-      : [...prev, profileId]
-  );
-}
-
-function saveSearch(search) {
-  const { query, position, nationality } = search;
-
-  // Don't save completely empty filters
-  if (!query && !position && !nationality) return;
-
-  const parts = [];
-  parts.push(query || "All players");
-  if (position) parts.push(position);
-  if (nationality) parts.push(nationality);
-  const label = parts.join(" • ");
-
-  setSavedSearches((prev) => [
-    {
-      id: Date.now(),
-      label,
-      query: query || "",
-      position: position || "",
-      nationality: nationality || "",
-    },
-    ...prev,
-  ]);
-}
-
-function deleteSearch(id) {
-  setSavedSearches((prev) => prev.filter((s) => s.id !== id));
-}
 
   // ---------- POSTS ----------
   async function fetchPosts() {
@@ -2005,7 +2101,7 @@ function deleteSearch(id) {
     }
   }
 
-    // ---------- MESSAGES (SUPABASE-BACKED) ----------
+  // ---------- MESSAGES ----------
   async function fetchMessages() {
     if (!session?.user) return;
     const userId = session.user.id;
@@ -2028,9 +2124,8 @@ function deleteSearch(id) {
 
     const userId = session.user.id;
 
-    // Optimistic local update (instant UI)
     const tempMessage = {
-      id: Date.now(), // temp local id
+      id: Date.now(),
       from_id: userId,
       to_id: toId,
       text: text.trim(),
@@ -2050,11 +2145,19 @@ function deleteSearch(id) {
 
     if (error) {
       console.error("Error sending message:", error);
-      // Optional: rollback or show toast
     } else if (data) {
-      // Replace the temp message with real one
       setMessages((prev) => {
         return [...prev.filter((m) => m !== tempMessage), data];
+      });
+
+      createNotification({
+        userId: toId,
+        actorId: userId,
+        type: "message",
+        entityId: data.id,
+        metadata: {
+          actor_name: profile?.full_name || session.user.email,
+        },
       });
     }
   }
@@ -2071,6 +2174,18 @@ function deleteSearch(id) {
       console.error("Error loading public profile:", pErr);
     } else {
       setPublicProfileUser(p);
+
+      if (session?.user && session.user.id !== userId) {
+        createNotification({
+          userId,
+          actorId: session.user.id,
+          type: "profile_view",
+          entityId: userId,
+          metadata: {
+            actor_name: profile?.full_name || session.user.email,
+          },
+        });
+      }
     }
 
     const { data: hData, error: hErr } = await supabase
@@ -2093,7 +2208,7 @@ function deleteSearch(id) {
     fetchPublicProfileData(userId);
   }
 
-  // ---------- ALL PROFILES (search, messages) ----------
+  // ---------- ALL PROFILES ----------
   async function fetchAllProfiles() {
     const { data, error } = await supabase.from("profiles").select("*");
 
@@ -2104,7 +2219,7 @@ function deleteSearch(id) {
     }
   }
 
-    // ---------- FOLLOWING (Supabase) ----------
+  // ---------- FOLLOWING ----------
   async function fetchFollowing() {
     if (!session?.user) return;
 
@@ -2131,7 +2246,6 @@ function deleteSearch(id) {
     const isAlreadyFollowing = followingIds.includes(targetUserId);
 
     if (isAlreadyFollowing) {
-      // UNFOLLOW: delete row
       const { error } = await supabase
         .from("follows")
         .delete()
@@ -2142,9 +2256,9 @@ function deleteSearch(id) {
         console.error("Error unfollowing user:", error);
       } else {
         setFollowingIds((prev) => prev.filter((id) => id !== targetUserId));
+        fetchFollowCountsForCurrentUser();
       }
     } else {
-      // FOLLOW: insert row
       const { error } = await supabase.from("follows").insert({
         follower_id: userId,
         following_id: targetUserId,
@@ -2154,112 +2268,97 @@ function deleteSearch(id) {
         console.error("Error following user:", error);
       } else {
         setFollowingIds((prev) => [...prev, targetUserId]);
+        fetchFollowCountsForCurrentUser();
+
+        createNotification({
+          userId: targetUserId,
+          actorId: userId,
+          type: "follow",
+          entityId: targetUserId,
+          metadata: {
+            actor_name: profile?.full_name || session.user.email,
+          },
+        });
       }
     }
   }
-
 
   // ---------- EFFECTS ----------
- useEffect(() => {
-  async function init() {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
+  useEffect(() => {
+    async function init() {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
 
-    if (!forceLoggedOut) {
-      setSession(session);
-    }
-    setLoading(false);
-
-    supabase.auth.onAuthStateChange((_event, newSession) => {
       if (!forceLoggedOut) {
-        setSession(newSession);
+        setSession(session);
       }
-    });
-  }
-  init();
-}, [forceLoggedOut]);
+      setLoading(false);
 
-useEffect(() => {
-  if (session?.user && !forceLoggedOut) {
-    // These should already exist in your App:
-    fetchProfile();
-    fetchPosts();
-    fetchHighlights();
-    fetchAllProfiles();
-    fetchMessages(); 
-    fetchFollowing();
-  } else if (!session?.user) {
-    // Optional: clear state when logged out
-    setProfile(null);
-    setPosts([]);
-    setHighlights([]);
-    setAllProfiles([]);
-    setMessages([]);
-    setFollowingIds([])
-  }
-}, [session, forceLoggedOut]);
-
-// ---------- REALTIME MESSAGES SUBSCRIPTION ----------
-useEffect(() => {
-  if (!session?.user || forceLoggedOut) return;
-
-  const userId = session.user.id;
-
-  const channel = supabase
-    .channel("messages-realtime")
-    .on(
-      "postgres_changes",
-      { event: "INSERT", schema: "public", table: "messages" },
-      (payload) => {
-        const msg = payload.new;
-        // Only care about messages that involve this user
-        if (msg.from_id === userId || msg.to_id === userId) {
-          setMessages((prev) => {
-            if (prev.some((m) => m.id === msg.id)) return prev;
-            return [...prev, msg];
-          });
+      supabase.auth.onAuthStateChange((_event, newSession) => {
+        if (!forceLoggedOut) {
+          setSession(newSession);
         }
-      }
-    )
-    .subscribe();
-
-  return () => {
-    supabase.removeChannel(channel);
-  };
-}, [session, forceLoggedOut]);
-
-
-// Load favorites & saved searches from localStorage on first load
-useEffect(() => {
-  try {
-    const favRaw = window.localStorage.getItem("sl_favorites");
-    if (favRaw) {
-      setFavorites(JSON.parse(favRaw));
+      });
     }
-    const searchRaw = window.localStorage.getItem("sl_saved_searches");
-    if (searchRaw) {
-      setSavedSearches(JSON.parse(searchRaw));
+    init();
+  }, [forceLoggedOut]);
+
+  useEffect(() => {
+    if (session?.user && !forceLoggedOut) {
+      fetchProfile();
+      fetchPosts();
+      fetchHighlights();
+      fetchAllProfiles();
+      fetchMessages();
+      fetchFollowing();
+      fetchFollowCountsForCurrentUser();
+    } else if (!session?.user) {
+      setProfile(null);
+      setPosts([]);
+      setHighlights([]);
+      setAllProfiles([]);
+      setMessages([]);
+      setFollowingIds([]);
+      setFollowerCount(0);
+      setFollowingCount(0);
+      setNotifications([]);
+      setUnreadCount(0);
     }
-  } catch (e) {
-    console.warn("Could not load saved favorites/searches", e);
-  }
-}, []);
+  }, [session, forceLoggedOut]);
 
-// Persist favorites & saved searches whenever they change
-useEffect(() => {
-  try {
-    window.localStorage.setItem("sl_favorites", JSON.stringify(favorites));
-    window.localStorage.setItem(
-      "sl_saved_searches",
-      JSON.stringify(savedSearches)
-    );
-  } catch (e) {
-    console.warn("Could not save favorites/searches", e);
-  }
-}, [favorites, savedSearches]);
+  useEffect(() => {
+    if (!session?.user || forceLoggedOut) return;
 
+    const userId = session.user.id;
 
+    const channel = supabase
+      .channel("messages-realtime")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "messages" },
+        (payload) => {
+          const msg = payload.new;
+          if (msg.from_id === userId || msg.to_id === userId) {
+            setMessages((prev) => {
+              if (prev.some((m) => m.id === msg.id)) return prev;
+              return [...prev, msg];
+            });
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [session, forceLoggedOut]);
+
+  useEffect(() => {
+    if (view === "notifications" && profile?.id) {
+      fetchNotificationsFromDb();
+    }
+  }, [view, profile?.id]);
 
   // ---------- RENDER ----------
   if (loading) {
@@ -2315,6 +2414,17 @@ useEffect(() => {
               Messages
             </button>
             <button
+              style={view === "notifications" ? styles.tabActive : styles.tab}
+              onClick={() => setView("notifications")}
+            >
+              Notifications
+              {unreadCount > 0 && (
+                <span style={{ marginLeft: 4, fontSize: 11 }}>
+                  ({unreadCount})
+                </span>
+              )}
+            </button>
+            <button
               style={view === "profile" ? styles.tabActive : styles.tab}
               onClick={() => setView("profile")}
             >
@@ -2331,6 +2441,8 @@ useEffect(() => {
             profile={profile}
             onSave={saveProfile}
             email={session.user.email}
+            followerCount={followerCount}
+            followingCount={followingCount}
           />
         )}
 
@@ -2355,16 +2467,100 @@ useEffect(() => {
           />
         )}
 
-        {view === "search" && (
-  <SearchView
-    profiles={allProfiles}
-    currentUserId={currentUserId}
-    onOpenProfile={openPublicProfile}
-    followingIds={followingIds}    
-    onToggleFollow={toggleFollow}   
-  />
-)}
+        {view === "notifications" && (
+          <div style={styles.container}>
+            <h2 style={styles.sectionHeader}>Notifications</h2>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: 12,
+              }}
+            >
+              <p style={styles.sectionSub}>
+                See when people follow you, message you, view your profile, or
+                favourite you.
+              </p>
+              <button
+                onClick={markAllNotificationsRead}
+                style={{
+                  padding: "6px 10px",
+                  borderRadius: 999,
+                  border: "1px solid #4b5563",
+                  background: "transparent",
+                  color: "#e5e7eb",
+                  fontSize: 12,
+                  cursor: "pointer",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Mark all as read
+              </button>
+            </div>
 
+            {notifications.length === 0 ? (
+              <p style={styles.emptyText}>No notifications yet.</p>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {notifications.map((n) => {
+                  const meta = n.metadata || {};
+                  const actorName = meta.actor_name || "Someone";
+
+                  let text = "";
+                  if (n.type === "follow") {
+                    text = `${actorName} followed you`;
+                  } else if (n.type === "message") {
+                    text = `${actorName} sent you a message`;
+                  } else if (n.type === "profile_view") {
+                    text = `${actorName} viewed your profile`;
+                  } else if (n.type === "favorite") {
+                    text = `${actorName} favourited your profile`;
+                  } else {
+                    text = `${actorName} did something`;
+                  }
+
+                  return (
+                    <div
+                      key={n.id}
+                      style={{
+                        padding: 10,
+                        borderRadius: 10,
+                        border: "1px solid #1f2937",
+                        background: n.read ? "#020617" : "#0b1120",
+                        fontSize: 13,
+                      }}
+                    >
+                      <p>{text}</p>
+                      <p
+                        style={{
+                          fontSize: 11,
+                          color: "#6b7280",
+                          marginTop: 4,
+                        }}
+                      >
+                        {n.created_at
+                          ? new Date(n.created_at).toLocaleString()
+                          : ""}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {view === "search" && (
+          <SearchView
+            profiles={allProfiles}
+            currentUserId={currentUserId}
+            onOpenProfile={openPublicProfile}
+            followingIds={followingIds}
+            onToggleFollow={toggleFollow}
+            onFavoriteNotification={handleFavoriteNotification}
+          />
+        )}
 
         {view === "messages" && (
           <MessagesView
