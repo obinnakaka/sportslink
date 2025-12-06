@@ -1261,6 +1261,7 @@ function SearchView(props) {
       border: "none",
       cursor: "pointer",
       fontSize: 18,
+      color: "#facc15",
     }}
     title={
       isFavorite ? "Remove from favourites" : "Add to favourites"
