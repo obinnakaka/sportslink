@@ -809,7 +809,14 @@ function FeedView({
 // ---------- SEARCH VIEW ----------
 function SearchView(props) {
   // support either props.profiles or props.allProfiles + optional currentUserId
-  const { profiles, allProfiles, currentUserId, onOpenProfile } = props;
+  const {
+  profiles,
+  allProfiles,
+  currentUserId,
+  onOpenProfile,
+  followingIds = [],
+  onToggleFollow,
+} = props;
 
   const baseList = (profiles || allProfiles || []).filter(
     (p) => p && p.id && p.id !== currentUserId
@@ -1155,6 +1162,7 @@ function SearchView(props) {
           {sorted.map((p) => {
             const age = calculateAge(p.dob);
             const isFavorite = favorites.includes(p.id);
+            const isFollowing = followingIds.includes(p.id);
 
             return (
               <div
@@ -1212,24 +1220,56 @@ function SearchView(props) {
                       {age !== "" && ` • Age ${age}`}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation(); // don’t open profile when toggling favorite
-                      toggleFavorite(p.id);
-                    }}
-                    style={{
-                      background: "none",
-                      border: "none",
-                      cursor: "pointer",
-                      fontSize: 18,
-                    }}
-                    title={
-                      isFavorite ? "Remove from favourites" : "Add to favourites"
-                    }
-                  >
-                    {isFavorite ? "★" : "☆"}
-                  </button>
+                  <div
+  style={{
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "flex-end",
+    gap: 6,
+  }}
+>
+  {/* Follow / Following button */}
+  <button
+    type="button"
+    onClick={(e) => {
+      e.stopPropagation();
+      onToggleFollow && onToggleFollow(p.id);
+    }}
+    style={{
+      padding: "4px 10px",
+      borderRadius: 999,
+      border: "1px solid #22c55e",
+      background: isFollowing ? "#22c55e" : "transparent",
+      color: isFollowing ? "#020617" : "#bbf7d0",
+      fontSize: 11,
+      cursor: "pointer",
+      fontWeight: 600,
+    }}
+  >
+    {isFollowing ? "Following" : "Follow"}
+  </button>
+
+  {/* Favourite star button */}
+  <button
+    type="button"
+    onClick={(e) => {
+      e.stopPropagation(); // don’t open profile when toggling favorite
+      toggleFavorite(p.id);
+    }}
+    style={{
+      background: "none",
+      border: "none",
+      cursor: "pointer",
+      fontSize: 18,
+    }}
+    title={
+      isFavorite ? "Remove from favourites" : "Add to favourites"
+    }
+  >
+    {isFavorite ? "★" : "☆"}
+  </button>
+</div>
+
                 </div>
 
                 {p.bio && (
@@ -1696,6 +1736,8 @@ function App() {
   const [allProfiles, setAllProfiles] = useState([]);
   const [messages, setMessages] = useState([]);
 
+  const [followingIds, setFollowingIds] = useState([]);
+
   const [favorites, setFavorites] = useState([]); // array of profile IDs
 const [savedSearches, setSavedSearches] = useState([]); // array of {id, label, query, position, nationality}
 
@@ -2061,6 +2103,61 @@ function deleteSearch(id) {
     }
   }
 
+    // ---------- FOLLOWING (Supabase) ----------
+  async function fetchFollowing() {
+    if (!session?.user) return;
+
+    const userId = session.user.id;
+
+    const { data, error } = await supabase
+      .from("follows")
+      .select("following_id")
+      .eq("follower_id", userId);
+
+    if (error) {
+      console.error("Error loading following list:", error);
+    } else {
+      setFollowingIds((data || []).map((row) => row.following_id));
+    }
+  }
+
+  async function toggleFollow(targetUserId) {
+    if (!session?.user || !targetUserId || targetUserId === session.user.id) {
+      return;
+    }
+
+    const userId = session.user.id;
+    const isAlreadyFollowing = followingIds.includes(targetUserId);
+
+    if (isAlreadyFollowing) {
+      // UNFOLLOW: delete row
+      const { error } = await supabase
+        .from("follows")
+        .delete()
+        .eq("follower_id", userId)
+        .eq("following_id", targetUserId);
+
+      if (error) {
+        console.error("Error unfollowing user:", error);
+      } else {
+        setFollowingIds((prev) => prev.filter((id) => id !== targetUserId));
+      }
+    } else {
+      // FOLLOW: insert row
+      const { error } = await supabase.from("follows").insert({
+        follower_id: userId,
+        following_id: targetUserId,
+      });
+
+      if (error) {
+        console.error("Error following user:", error);
+      } else {
+        setFollowingIds((prev) => [...prev, targetUserId]);
+      }
+    }
+  }
+
+
   // ---------- EFFECTS ----------
  useEffect(() => {
   async function init() {
@@ -2089,7 +2186,8 @@ useEffect(() => {
     fetchPosts();
     fetchHighlights();
     fetchAllProfiles();
-    fetchMessages();  // 👉 new
+    fetchMessages(); 
+    fetchFollowing();
   } else if (!session?.user) {
     // Optional: clear state when logged out
     setProfile(null);
@@ -2097,6 +2195,7 @@ useEffect(() => {
     setHighlights([]);
     setAllProfiles([]);
     setMessages([]);
+    setFollowingIds([])
   }
 }, [session, forceLoggedOut]);
 
@@ -2256,12 +2355,15 @@ useEffect(() => {
         )}
 
         {view === "search" && (
-          <SearchView
-            profiles={allProfiles}
-            currentUserId={currentUserId}
-            onOpenProfile={openPublicProfile}
-          />
-        )}
+  <SearchView
+    profiles={allProfiles}
+    currentUserId={currentUserId}
+    onOpenProfile={openPublicProfile}
+    followingIds={followingIds}    
+    onToggleFollow={toggleFollow}   
+  />
+)}
+
 
         {view === "messages" && (
           <MessagesView
