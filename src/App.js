@@ -1,134 +1,1302 @@
 import React, { useEffect, useState } from "react";
 import supabase from "./supabaseClient";
 
+// ---------- UTILITIES ----------
+function getFlagEmoji(country) {
+  if (!country) return "";
+  const code = country
+    .toUpperCase()
+    .replace(/[^A-Z]/g, "")
+    .slice(0, 2);
+  return String.fromCodePoint(
+    ...[...code].map((c) => c.charCodeAt(0) + 127397)
+  );
+}
+
+function calculateAge(dob) {
+  if (!dob) return "";
+  const birth = new Date(dob);
+  if (Number.isNaN(birth.getTime())) return "";
+  const diff = Date.now() - birth.getTime();
+  return new Date(diff).getUTCFullYear() - 1970;
+}
+
+// ---------- STYLES ----------
+const styles = {
+  page: {
+    minHeight: "100vh",
+    background: "#020617",
+    padding: "16px",
+    fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
+    color: "white",
+  },
+  appShell: {
+    maxWidth: 1100,
+    margin: "0 auto",
+  },
+  header: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 24,
+    padding: "12px 16px",
+    background: "#020617",
+    borderRadius: 16,
+    border: "1px solid #1f2937",
+    boxShadow: "0 10px 30px rgba(0,0,0,0.6)",
+    position: "sticky",
+    top: 8,
+    zIndex: 20,
+  },
+  brand: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+  },
+  logoCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: "50%",
+    background: "linear-gradient(135deg,#22c55e,#2563eb)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontWeight: 800,
+    fontSize: 16,
+  },
+  brandTextMain: {
+    fontSize: 18,
+    fontWeight: 700,
+  },
+  brandTextSub: {
+    fontSize: 12,
+    color: "#9ca3af",
+  },
+  tab: {
+    padding: "8px 14px",
+    borderRadius: 999,
+    border: "1px solid #4b5563",
+    background: "#020617",
+    color: "#e5e7eb",
+    cursor: "pointer",
+    fontSize: 13,
+  },
+  tabActive: {
+    padding: "8px 14px",
+    borderRadius: 999,
+    border: "1px solid #22c55e",
+    background: "#22c55e",
+    color: "#020617",
+    cursor: "pointer",
+    fontSize: 13,
+    fontWeight: 600,
+  },
+  logout: {
+    padding: "8px 14px",
+    borderRadius: 999,
+    border: "1px solid #ef4444",
+    background: "rgba(248,113,113,0.1)",
+    color: "#fecaca",
+    cursor: "pointer",
+    fontSize: 13,
+  },
+  container: {
+    maxWidth: 900,
+    margin: "24px auto",
+    background: "#020617",
+    borderRadius: 20,
+    padding: 20,
+    boxShadow: "0 30px 80px rgba(0,0,0,0.8)",
+    border: "1px solid #1f2937",
+  },
+  sectionHeader: {
+    marginBottom: 8,
+    fontSize: 20,
+    fontWeight: 600,
+  },
+  sectionSub: {
+    color: "#9ca3af",
+    fontSize: 13,
+    marginBottom: 16,
+  },
+  input: {
+    width: "100%",
+    padding: "10px 12px",
+    borderRadius: 10,
+    border: "1px solid #374151",
+    marginBottom: 12,
+    fontSize: 14,
+    background: "#020617",
+    color: "#e5e7eb",
+  },
+  textarea: {
+    width: "100%",
+    padding: "10px 12px",
+    borderRadius: 10,
+    border: "1px solid #374151",
+    marginBottom: 12,
+    fontSize: 14,
+    minHeight: 80,
+    background: "#020617",
+    color: "#e5e7eb",
+  },
+  buttonPrimaryFull: {
+    width: "100%",
+    padding: "12px 16px",
+    borderRadius: 999,
+    border: "none",
+    background: "#2563eb",
+    color: "white",
+    fontWeight: 600,
+    cursor: "pointer",
+    marginTop: 8,
+    marginBottom: 8,
+    fontSize: 14,
+  },
+  emptyText: {
+    color: "#9ca3af",
+    fontSize: 14,
+  },
+  th: {
+    padding: "10px",
+    border: "1px solid #1f2937",
+    textAlign: "center",
+    fontWeight: "bold",
+    background: "#020617",
+    color: "#e5e7eb",
+  },
+  td: {
+    padding: "10px",
+    border: "1px solid #111827",
+    textAlign: "center",
+    color: "#e5e7eb",
+  },
+  postCard: {
+    background: "#020617",
+    padding: 15,
+    borderRadius: 12,
+    marginBottom: 12,
+    border: "1px solid #1f2937",
+  },
+  pill: {
+    display: "inline-block",
+    padding: "3px 8px",
+    borderRadius: 999,
+    background: "rgba(148,163,184,0.1)",
+    color: "#e5e7eb",
+    fontSize: 11,
+    marginRight: 4,
+  },
+};
+
+// ---------- AUTH SCREEN ----------
+function AuthScreen({ signIn, signUp, resetPassword }) {
+  const [mode, setMode] = useState("signin"); // 'signin' | 'signup'
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setError("");
+    setMessage("");
+
+    if (!email.trim() || !password.trim()) {
+      setError("Email and password are required.");
+      return;
+    }
+
+    if (mode === "signup" && password.length < 6) {
+      setError("Password must be at least 6 characters.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      let result;
+      if (mode === "signin") {
+        result = await signIn(email.trim(), password);
+        if (result?.error) {
+          setError(result.error.message || "Could not sign in.");
+        }
+      } else {
+        result = await signUp(email.trim(), password);
+        if (result?.error) {
+          const raw = result.error.message || "";
+          const lower = raw.toLowerCase();
+          // friendlier message when email already exists
+          if (
+            lower.includes("already registered") ||
+            lower.includes("already exists") ||
+            lower.includes("duplicate")
+          ) {
+            setError(
+              "An account already exists with this email. Try signing in instead."
+            );
+          } else {
+            setError(raw || "Could not create account.");
+          }
+        } else {
+          setMessage(
+            "Account created. Check your email to confirm, then sign in."
+          );
+          setMode("signin");
+          setPassword("");
+        }
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleResetPassword() {
+    setError("");
+    setMessage("");
+
+    if (!email.trim()) {
+      setError(
+        "Enter your email address above, then click “Forgot password?”."
+      );
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const result = await resetPassword(email.trim());
+      if (result?.error) {
+        setError(result.error.message || "Could not send reset email.");
+      } else {
+        setMessage(
+          "If an account exists for this email, a password reset link has been sent."
+        );
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div style={styles.page}>
+      <div style={styles.container}>
+        <h1>SportsLink</h1>
+        <p style={{ color: "#6b7280", marginBottom: 20 }}>
+          {mode === "signin"
+            ? "Sign in to connect players, coaches, and clubs."
+            : "Create your account to build your football profile."}
+        </p>
+
+        {/* Toggle buttons */}
+        <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+          <button
+            type="button"
+            style={mode === "signin" ? styles.tabActive : styles.tab}
+            onClick={() => {
+              setMode("signin");
+              setError("");
+              setMessage("");
+            }}
+          >
+            Sign in
+          </button>
+          <button
+            type="button"
+            style={mode === "signup" ? styles.tabActive : styles.tab}
+            onClick={() => {
+              setMode("signup");
+              setError("");
+              setMessage("");
+            }}
+          >
+            Create account
+          </button>
+        </div>
+
+        {/* Messages */}
+        {error && (
+          <div
+            style={{
+              marginBottom: 12,
+              padding: "8px 10px",
+              borderRadius: 8,
+              border: "1px solid #b91c1c",
+              background: "rgba(248,113,113,0.1)",
+              color: "#fecaca",
+              fontSize: 13,
+            }}
+          >
+            {error}
+          </div>
+        )}
+        {message && (
+          <div
+            style={{
+              marginBottom: 12,
+              padding: "8px 10px",
+              borderRadius: 8,
+              border: "1px solid #16a34a",
+              background: "rgba(34,197,94,0.1)",
+              color: "#bbf7d0",
+              fontSize: 13,
+            }}
+          >
+            {message}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit}>
+          <input
+            style={styles.input}
+            type="email"
+            placeholder="Email"
+            autoComplete="off"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+
+          <input
+            style={styles.input}
+            type="password"
+            placeholder="Password"
+            autoComplete="off"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+
+          {mode === "signin" && (
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                marginBottom: 8,
+              }}
+            >
+              <button
+                type="button"
+                onClick={handleResetPassword}
+                disabled={loading}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: "#60a5fa",
+                  fontSize: 12,
+                  cursor: "pointer",
+                  padding: 0,
+                  textDecoration: "underline",
+                }}
+              >
+                Forgot password?
+              </button>
+            </div>
+          )}
+
+          <button
+            type="submit"
+            style={styles.buttonPrimaryFull}
+            disabled={loading}
+          >
+            {loading
+              ? "Please wait..."
+              : mode === "signin"
+              ? "Sign In"
+              : "Create Account"}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ---------- PROFILE VIEW ----------
+function ProfileView({ profile, onSave, email }) {
+  const [form, setForm] = useState({
+    full_name: profile?.full_name || "",
+    bio: profile?.bio || "",
+    nationality: profile?.nationality || "",
+    position: profile?.position || "",
+    club: profile?.club || "",
+    height: profile?.height || "",
+    weight: profile?.weight || "",
+    dob: profile?.dob || "",
+    preferred_foot: profile?.preferred_foot || "",
+    summary: profile?.summary || "",
+    cover_photo: profile?.cover_photo || "",
+  });
+  const [photoFile, setPhotoFile] = useState(null);
+
+  useEffect(() => {
+    setForm({
+      full_name: profile?.full_name || "",
+      bio: profile?.bio || "",
+      nationality: profile?.nationality || "",
+      position: profile?.position || "",
+      club: profile?.club || "",
+      height: profile?.height || "",
+      weight: profile?.weight || "",
+      dob: profile?.dob || "",
+      preferred_foot: profile?.preferred_foot || "",
+      summary: profile?.summary || "",
+      cover_photo: profile?.cover_photo || "",
+    });
+  }, [profile]);
+
+  function handleChange(e) {
+    const { name, value } = e.target;
+    setForm((f) => ({ ...f, [name]: value }));
+  }
+
+  function handleSubmit(e) {
+    e.preventDefault();
+    onSave({ ...form, photoFile });
+  }
+
+  const fieldsFilled = Object.values(form).filter((v) => v).length;
+  const completion = Math.round((fieldsFilled / 11) * 100);
+
+  return (
+    <div style={styles.container}>
+      <h2 style={styles.sectionHeader}>My Profile</h2>
+      <p style={styles.sectionSub}>
+        Logged in as <strong>{email}</strong>. Complete your details so clubs
+        and coaches can quickly understand who you are.
+      </p>
+
+      <div
+        style={{
+          marginBottom: 16,
+          padding: "8px 10px",
+          borderRadius: 12,
+          border: "1px solid #1f2937",
+          background: "rgba(15,23,42,0.9)",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          fontSize: 13,
+        }}
+      >
+        <span>Profile completeness</span>
+        <span style={{ fontWeight: 600 }}>{completion}%</span>
+      </div>
+
+      {profile?.photo_url && (
+        <img
+          src={profile.photo_url}
+          alt=""
+          style={{
+            width: 96,
+            height: 96,
+            borderRadius: "50%",
+            objectFit: "cover",
+            marginBottom: 16,
+          }}
+        />
+      )}
+
+      <form onSubmit={handleSubmit}>
+        <label style={{ fontSize: 13 }}>Profile photo</label>
+        <input
+          type="file"
+          accept="image/*"
+          onChange={(e) => setPhotoFile(e.target.files?.[0] || null)}
+          style={{ marginBottom: 16 }}
+        />
+
+        <label style={{ fontSize: 13 }}>Full name</label>
+        <input
+          style={styles.input}
+          name="full_name"
+          value={form.full_name}
+          onChange={handleChange}
+        />
+
+        <label style={{ fontSize: 13 }}>Short bio</label>
+        <textarea
+          style={styles.textarea}
+          name="bio"
+          value={form.bio}
+          onChange={handleChange}
+          placeholder="Example: Left-footed winger with strong 1v1 ability and work rate."
+        />
+
+        <label style={{ fontSize: 13 }}>Nationality</label>
+        <input
+          style={styles.input}
+          name="nationality"
+          placeholder="e.g. Nigeria, Canada"
+          value={form.nationality}
+          onChange={handleChange}
+        />
+
+        <label style={{ fontSize: 13 }}>Position</label>
+        <input
+          style={styles.input}
+          name="position"
+          placeholder="e.g. ST, LW, CM, CB, GK"
+          value={form.position}
+          onChange={handleChange}
+        />
+
+        <label style={{ fontSize: 13 }}>Club / Academy</label>
+        <input
+          style={styles.input}
+          name="club"
+          value={form.club}
+          onChange={handleChange}
+        />
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit,minmax(130px,1fr))",
+            gap: 12,
+          }}
+        >
+          <div>
+            <label style={{ fontSize: 13 }}>Height (cm)</label>
+            <input
+              style={styles.input}
+              name="height"
+              value={form.height}
+              onChange={handleChange}
+            />
+          </div>
+          <div>
+            <label style={{ fontSize: 13 }}>Weight (kg)</label>
+            <input
+              style={styles.input}
+              name="weight"
+              value={form.weight}
+              onChange={handleChange}
+            />
+          </div>
+          <div>
+            <label style={{ fontSize: 13 }}>Preferred foot</label>
+            <input
+              style={styles.input}
+              name="preferred_foot"
+              placeholder="Left, Right, Both"
+              value={form.preferred_foot}
+              onChange={handleChange}
+            />
+          </div>
+        </div>
+
+        <label style={{ fontSize: 13, marginTop: 8 }}>Date of birth</label>
+        <input
+          style={styles.input}
+          type="date"
+          name="dob"
+          value={form.dob || ""}
+          onChange={handleChange}
+        />
+
+        <label style={{ fontSize: 13 }}>Summary / About</label>
+        <textarea
+          style={styles.textarea}
+          name="summary"
+          value={form.summary}
+          onChange={handleChange}
+          placeholder="Tell clubs what makes you unique: style of play, strengths, key career moments."
+        />
+
+        <label style={{ fontSize: 13 }}>Cover photo URL (optional)</label>
+        <input
+          style={styles.input}
+          name="cover_photo"
+          value={form.cover_photo}
+          onChange={handleChange}
+        />
+
+        <button type="submit" style={styles.buttonPrimaryFull}>
+          Save Profile
+        </button>
+      </form>
+    </div>
+  );
+}
+
+// ---------- FEED VIEW ----------
+function FeedView({
+  posts,
+  newPost,
+  setNewPost,
+  createPost,
+  highlights,
+  highlightTitle,
+  setHighlightTitle,
+  setHighlightFile,
+  uploadHighlight,
+}) {
+  return (
+    <div style={styles.container}>
+      <h2 style={styles.sectionHeader}>Feed</h2>
+      <p style={styles.sectionSub}>
+        Share updates about your training, matches, or achievements. Coaches
+        see this first.
+      </p>
+
+      <textarea
+        style={styles.textarea}
+        placeholder="Share an update..."
+        value={newPost}
+        onChange={(e) => setNewPost(e.target.value)}
+      />
+      <button style={styles.buttonPrimaryFull} onClick={createPost}>
+        Post update
+      </button>
+
+      <h3 style={{ marginTop: 24, marginBottom: 4 }}>Upload highlight</h3>
+      <p style={{ ...styles.sectionSub, marginBottom: 8 }}>
+        Short, sharp clips work best. Show your decision-making, not just skills.
+      </p>
+      <input
+        style={styles.input}
+        placeholder="Highlight title"
+        value={highlightTitle}
+        onChange={(e) => setHighlightTitle(e.target.value)}
+      />
+      <input
+        type="file"
+        accept="video/*"
+        onChange={(e) => setHighlightFile(e.target.files?.[0] || null)}
+        style={{ marginBottom: 12 }}
+      />
+      <button style={styles.buttonPrimaryFull} onClick={uploadHighlight}>
+        Upload highlight
+      </button>
+
+      <h3 style={{ marginTop: 24, marginBottom: 8 }}>Highlights</h3>
+      {highlights.length === 0 ? (
+        <p style={styles.emptyText}>
+          You don’t have any highlights yet. Upload a clip from a recent match
+          or training session.
+        </p>
+      ) : (
+        <div style={{ display: "grid", gap: 12 }}>
+          {highlights.map((h) => (
+            <div key={h.id} style={styles.postCard}>
+              <strong>{h.title}</strong>
+              <video
+                src={h.video_url}
+                controls
+                style={{ width: "100%", borderRadius: 8, marginTop: 8 }}
+              />
+            </div>
+          ))}
+        </div>
+      )}
+
+      <h3 style={{ marginTop: 24, marginBottom: 8 }}>Recent posts</h3>
+      {posts.length === 0 ? (
+        <p style={styles.emptyText}>
+          No posts yet. Share your first update to let others see what you’re
+          working on.
+        </p>
+      ) : (
+        posts.map((p) => (
+          <div key={p.id} style={styles.postCard}>
+            {p.content}
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
+// ---------- SEARCH VIEW ----------
+function SearchView({ profiles, currentUserId, onOpenProfile }) {
+  const [query, setQuery] = useState("");
+
+  const filtered = profiles.filter((p) => {
+    if (!p) return false;
+    if (p.id === currentUserId) return false;
+    if (!query.trim()) return true;
+    const name = p.full_name || p.username || p.email || "";
+    return name.toLowerCase().includes(query.toLowerCase());
+  });
+
+  return (
+    <div style={styles.container}>
+      <h2 style={styles.sectionHeader}>Search</h2>
+      <p style={styles.sectionSub}>
+        Discover players and coaches. Click a profile to view their public page.
+      </p>
+
+      <input
+        style={styles.input}
+        placeholder="Search by name, club, nationality..."
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+      />
+
+      {filtered.length === 0 ? (
+        <p style={{ ...styles.emptyText, marginTop: 16 }}>
+          No profiles match this search yet.
+        </p>
+      ) : (
+        <div style={{ marginTop: 16, display: "grid", gap: 12 }}>
+          {filtered.map((p) => (
+            <div
+              key={p.id}
+              style={{
+                ...styles.postCard,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+              }}
+              onClick={() => onOpenProfile(p.id)}
+            >
+              {p.photo_url && (
+                <img
+                  src={p.photo_url}
+                  alt=""
+                  style={{
+                    width: 52,
+                    height: 52,
+                    borderRadius: "50%",
+                    objectFit: "cover",
+                  }}
+                />
+              )}
+              <div>
+                <div style={{ fontWeight: 600, marginBottom: 4 }}>
+                  {p.full_name || p.username || p.email}
+                </div>
+                <div style={{ fontSize: 13, color: "#9ca3af", marginBottom: 4 }}>
+                  {p.position && (
+                    <span style={styles.pill}>{p.position}</span>
+                  )}
+                  {p.club && <span style={styles.pill}>{p.club}</span>}
+                </div>
+                <div style={{ fontSize: 12, color: "#6b7280" }}>
+                  {p.nationality
+                    ? `${getFlagEmoji(p.nationality)} ${p.nationality}`
+                    : ""}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------- MESSAGES VIEW (local only) ----------
+function MessagesView({ profiles, currentUserId, messages, setMessages }) {
+  const [selectedUserId, setSelectedUserId] = useState(null);
+  const [draft, setDraft] = useState("");
+
+  const contacts = profiles.filter(
+    (p) => p && p.id && p.id !== currentUserId
+  );
+
+  const selectedUser =
+    contacts.find((p) => p.id === selectedUserId) || null;
+
+  const chatMessages = messages.filter(
+    (m) =>
+      (m.fromId === currentUserId && m.toId === selectedUserId) ||
+      (m.toId === currentUserId && m.fromId === selectedUserId)
+  );
+
+  function sendMessage() {
+    if (!draft.trim() || !selectedUserId || !currentUserId) return;
+    const newMessage = {
+      id: Date.now(),
+      fromId: currentUserId,
+      toId: selectedUserId,
+      text: draft.trim(),
+      createdAt: new Date().toISOString(),
+    };
+    setMessages((prev) => [...prev, newMessage]);
+    setDraft("");
+  }
+
+  return (
+    <div style={styles.container}>
+      <h2 style={styles.sectionHeader}>Messages</h2>
+      <p style={styles.sectionSub}>
+        Direct messages are stored locally for now. Realtime chat can be wired
+        to Supabase later.
+      </p>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "260px 1fr",
+          gap: 16,
+          minHeight: 300,
+        }}
+      >
+        {/* Contacts */}
+        <div
+          style={{
+            borderRight: "1px solid #1f2937",
+            paddingRight: 12,
+          }}
+        >
+          <h3 style={{ fontSize: 15, marginBottom: 8 }}>Chats</h3>
+          {contacts.length === 0 ? (
+            <p style={styles.emptyText}>No other profiles found yet.</p>
+          ) : (
+            <div>
+              {contacts.map((u) => (
+                <div
+                  key={u.id}
+                  onClick={() => setSelectedUserId(u.id)}
+                  style={{
+                    padding: 8,
+                    borderRadius: 10,
+                    cursor: "pointer",
+                    background:
+                      selectedUserId === u.id ? "#111827" : "transparent",
+                    border:
+                      selectedUserId === u.id
+                        ? "1px solid #22c55e"
+                        : "1px solid #1f2937",
+                    display: "flex",
+                    alignItems: "center",
+                    marginBottom: 6,
+                    gap: 8,
+                  }}
+                >
+                  {u.photo_url && (
+                    <img
+                      src={u.photo_url}
+                      alt=""
+                      style={{
+                        width: 32,
+                        height: 32,
+                        borderRadius: "50%",
+                        objectFit: "cover",
+                      }}
+                    />
+                  )}
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: 500 }}>
+                      {u.full_name || u.username || u.email}
+                    </div>
+                    <div style={{ fontSize: 12, color: "#9ca3af" }}>
+                      {u.position || ""}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Chat window */}
+        <div style={{ display: "flex", flexDirection: "column" }}>
+          {!selectedUser ? (
+            <p style={styles.emptyText}>
+              Select a profile on the left to start a conversation.
+            </p>
+          ) : (
+            <>
+              <div
+                style={{
+                  borderBottom: "1px solid #1f2937",
+                  paddingBottom: 8,
+                  marginBottom: 8,
+                }}
+              >
+                <strong>
+                  Chat with{" "}
+                  {selectedUser.full_name ||
+                    selectedUser.username ||
+                    selectedUser.email}
+                </strong>
+              </div>
+
+              <div
+                style={{
+                  flex: 1,
+                  overflowY: "auto",
+                  padding: 8,
+                  borderRadius: 12,
+                  border: "1px solid #1f2937",
+                  marginBottom: 8,
+                  maxHeight: 320,
+                }}
+              >
+                {chatMessages.length === 0 ? (
+                  <p style={styles.emptyText}>No messages yet. Say hi 👋</p>
+                ) : (
+                  chatMessages.map((m) => {
+                    const isMine = m.fromId === currentUserId;
+                    return (
+                      <div
+                        key={m.id}
+                        style={{
+                          display: "flex",
+                          justifyContent: isMine ? "flex-end" : "flex-start",
+                          marginBottom: 6,
+                        }}
+                      >
+                        <div
+                          style={{
+                            maxWidth: "70%",
+                            padding: "6px 10px",
+                            borderRadius: 12,
+                            background: isMine ? "#2563eb" : "#111827",
+                            color: "white",
+                            fontSize: 14,
+                          }}
+                        >
+                          {m.text}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              <div style={{ display: "flex", gap: 8 }}>
+                <input
+                  style={{ ...styles.input, marginBottom: 0 }}
+                  placeholder="Type a message..."
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      sendMessage();
+                    }
+                  }}
+                />
+                <button
+                  style={{
+                    padding: "10px 14px",
+                    borderRadius: 999,
+                    border: "none",
+                    background: "#22c55e",
+                    color: "#020617",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    whiteSpace: "nowrap",
+                    fontSize: 13,
+                  }}
+                  onClick={sendMessage}
+                >
+                  Send
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------- PUBLIC PROFILE VIEW ----------
+function PublicProfileView({ profile, highlights }) {
+  const p = profile;
+
+  if (!p) {
+    return (
+      <div style={styles.page}>
+        <div style={styles.container}>
+          <h2 style={styles.sectionHeader}>Loading profile…</h2>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ ...styles.page, padding: 0 }}>
+      {/* COVER BANNER */}
+      <div
+        style={{
+          width: "100%",
+          height: 220,
+          backgroundImage: p.cover_photo
+            ? `url(${p.cover_photo})`
+            : "linear-gradient(to right, #003087, #d4af37)",
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+          position: "relative",
+        }}
+      >
+        {p.photo_url && (
+          <img
+            src={p.photo_url}
+            alt=""
+            style={{
+              width: 140,
+              height: 140,
+              borderRadius: "50%",
+              border: "5px solid white",
+              position: "absolute",
+              bottom: -70,
+              left: "50%",
+              transform: "translateX(-50%)",
+              objectFit: "cover",
+              boxShadow: "0 4px 14px rgba(0,0,0,0.3)",
+            }}
+          />
+        )}
+      </div>
+
+      {/* MAIN HEADER */}
+      <div style={{ marginTop: 80, textAlign: "center", padding: 16 }}>
+        <h1 style={{ fontSize: 26, marginBottom: 6 }}>
+          {p.full_name || p.username}
+        </h1>
+
+        <div style={{ fontSize: 16, color: "#d1d5db", marginBottom: 2 }}>
+          {p.position || "Player"}{" "}
+          {p.nationality &&
+            `· ${getFlagEmoji(p.nationality)} ${p.nationality}`}
+        </div>
+
+        <div style={{ fontSize: 14, color: "#9ca3af", marginBottom: 6 }}>
+          {p.club ? `Club: ${p.club}` : "No club listed"}
+        </div>
+
+        <div style={{ fontSize: 13, color: "#9ca3af" }}>
+          Age: {calculateAge(p.dob) || "—"} · Height: {p.height || "—"} ·
+          Weight: {p.weight || "—"} · Foot: {p.preferred_foot || "—"}
+        </div>
+      </div>
+
+      {/* SUMMARY */}
+      <div style={{ padding: 20 }}>
+        <h2 style={styles.sectionHeader}>About</h2>
+        <p style={{ whiteSpace: "pre-wrap", lineHeight: 1.5, fontSize: 14 }}>
+          {p.summary || "No summary provided yet."}
+        </p>
+      </div>
+
+      {/* ATTRIBUTES */}
+      <div style={{ padding: 20 }}>
+        <h2 style={styles.sectionHeader}>Attributes</h2>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
+          {p.attributes &&
+            Object.entries(p.attributes).map(([attr, value]) => (
+              <div
+                key={attr}
+                style={{
+                  width: 110,
+                  height: 110,
+                  borderRadius: "50%",
+                  border: "6px solid #003087",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontWeight: "bold",
+                  color: "#003087",
+                  background: "white",
+                }}
+              >
+                <div style={{ fontSize: 20 }}>{value}</div>
+                <div
+                  style={{ fontSize: 11, marginTop: 4, textTransform: "capitalize" }}
+                >
+                  {attr}
+                </div>
+              </div>
+            ))}
+          {!p.attributes && (
+            <p style={styles.emptyText}>No attribute scores added yet.</p>
+          )}
+        </div>
+      </div>
+
+      {/* CAREER STATS */}
+      <div style={{ padding: 20 }}>
+        <h2 style={styles.sectionHeader}>Career stats</h2>
+        {Array.isArray(p.stats) && p.stats.length > 0 ? (
+          <table
+            style={{
+              width: "100%",
+              borderCollapse: "collapse",
+              marginTop: 10,
+            }}
+          >
+            <thead>
+              <tr style={{ background: "#003087", color: "white" }}>
+                <th style={styles.th}>Season</th>
+                <th style={styles.th}>Club</th>
+                <th style={styles.th}>Matches</th>
+                <th style={styles.th}>Goals</th>
+                <th style={styles.th}>Assists</th>
+                <th style={styles.th}>Clean Sheets</th>
+              </tr>
+            </thead>
+            <tbody>
+              {p.stats.map((row, i) => (
+                <tr key={i}>
+                  <td style={styles.td}>{row.season}</td>
+                  <td style={styles.td}>{row.club}</td>
+                  <td style={styles.td}>{row.matches}</td>
+                  <td style={styles.td}>{row.goals}</td>
+                  <td style={styles.td}>{row.assists}</td>
+                  <td style={styles.td}>{row.clean_sheets}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <p style={styles.emptyText}>No stats available.</p>
+        )}
+      </div>
+
+      {/* CAREER HISTORY */}
+      <div style={{ padding: 20 }}>
+        <h2 style={styles.sectionHeader}>Career history</h2>
+        {Array.isArray(p.career_history) && p.career_history.length > 0 ? (
+          p.career_history.map((club, i) => (
+            <div
+              key={i}
+              style={{
+                padding: 12,
+                borderLeft: "4px solid #003087",
+                marginBottom: 10,
+                background: "#f9f9f9",
+                color: "#111827",
+              }}
+            >
+              <strong>{club.years}</strong> — {club.club}
+            </div>
+          ))
+        ) : (
+          <p style={styles.emptyText}>No history provided yet.</p>
+        )}
+      </div>
+
+      {/* HIGHLIGHTS */}
+      <div style={{ padding: 20 }}>
+        <h2 style={styles.sectionHeader}>Highlights</h2>
+        {highlights.length === 0 ? (
+          <p style={styles.emptyText}>No highlights uploaded for this player.</p>
+        ) : (
+          <div style={{ display: "grid", gap: 20 }}>
+            {highlights.map((h) => (
+              <div key={h.id}>
+                <strong>{h.title}</strong>
+                <video
+                  src={h.video_url}
+                  controls
+                  style={{ width: "100%", borderRadius: 12, marginTop: 8 }}
+                />
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---------- MAIN APP ----------
 function App() {
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const [profile, setProfile] = useState(null);
+  // add this:
+  const [forceLoggedOut, setForceLoggedOut] = useState(false);
 
+  const [profile, setProfile] = useState(null);
   const [posts, setPosts] = useState([]);
   const [newPost, setNewPost] = useState("");
 
-  const [view, setView] = useState("feed"); // "feed" | "profile" | "search" | "messages"
+  // feed | profile | publicProfile | search | messages
+  const [view, setView] = useState("feed");
 
-  // Highlights (videos)
   const [highlights, setHighlights] = useState([]);
   const [highlightTitle, setHighlightTitle] = useState("");
   const [highlightFile, setHighlightFile] = useState(null);
 
-  // Search & follow
+  const [publicProfileUser, setPublicProfileUser] = useState(null);
+  const [publicProfileHighlights, setPublicProfileHighlights] = useState([]);
+
   const [allProfiles, setAllProfiles] = useState([]);
-  const [searchFilters, setSearchFilters] = useState({
-    country: "",
-    position: "",
-    minAge: "",
-    maxAge: "",
-  });
-  const [followingIds, setFollowingIds] = useState([]);
-
-  // Messaging
-  const [selectedChatUserId, setSelectedChatUserId] = useState(null);
   const [messages, setMessages] = useState([]);
-  const [newMessage, setNewMessage] = useState("");
 
-  // ---------- AUTH SESSION ----------
-  useEffect(() => {
-    const getSession = async () => {
-      const { data, error } = await supabase.auth.getSession();
-      if (error) {
-        console.error("Error getting session:", error);
-      } else {
-        setSession(data.session);
-      }
-      setLoading(false);
-    };
+// ---------- AUTH ----------
+async function signIn(email, password) {
+  const { error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  });
+  return { error };
+}
 
-    getSession();
+async function signUp(email, password) {
+  const { error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      emailRedirectTo: window.location.origin,
+    },
+  });
+  return { error };
+}
 
-    const { data: listener } = supabase.auth.onAuthStateChange(
-      (_event, newSession) => {
-        setSession(newSession);
-      }
-    );
+async function resetPassword(email) {
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: window.location.origin,
+  });
+  return { error };
+}
 
-    return () => {
-      listener.subscription.unsubscribe();
-    };
-  }, []);
-
-  // When logged in, load profile, posts, highlights, profiles, follows
-  useEffect(() => {
-    if (session?.user) {
-      fetchProfile();
-      fetchPosts();
-      fetchHighlights();
-      fetchAllProfiles();
-      fetchFollowing();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session]);
-
-  // ---------- AUTH ----------
-  async function signUp(email, password) {
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: "http://localhost:3000",
-      },
-    });
-    if (error) {
-      alert(error.message);
-    } else {
-      alert("Sign up successful. You can now log in.");
-    }
+async function signOut() {
+  try {
+    await supabase.auth.signOut({ scope: "global" });
+  } catch (error) {
+    console.error("Error signing out:", error);
   }
 
-  async function signIn(email, password) {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    if (error) {
-      alert(error.message);
-    }
-  }
+  // tell the app: treat user as logged out from now on
+  setForceLoggedOut(true);
 
-  async function signOut() {
-    await supabase.auth.signOut();
-    setProfile(null);
-    setPosts([]);
-    setHighlights([]);
-    setAllProfiles([]);
-    setFollowingIds([]);
-    setSelectedChatUserId(null);
-    setMessages([]);
-  }
+  // clear all local state
+  setSession(null);
+  setProfile(null);
+  setPosts([]);
+  setHighlights([]);
+  setPublicProfileUser(null);
+  setPublicProfileHighlights([]);
+  setAllProfiles([]);
+  setMessages([]);
+  setView("feed");
+}
 
   // ---------- PROFILE ----------
-  async function fetchProfile() {
-    if (!session?.user) return;
+ async function fetchProfile() {
+  if (!session?.user) return;
 
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", session.user.id)
-      .single();
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("*")
+    .eq("id", session.user.id)
+    .single();
 
-    if (error && error.code !== "PGRST116") {
-      console.error("Error loading profile:", error);
-    } else {
-      setProfile(data);
+  if (error && error.code !== "PGRST116") {
+    console.error("Error loading profile:", error);
+  } else {
+    setProfile(data);
+
+    // If this looks like a brand new user (no profile yet),
+    // push them to the Profile screen so they can fill it.
+    if (!data || !data.full_name) {
+      setView("profile");
     }
   }
+}
 
   async function saveProfile(updates) {
     if (!session?.user) return;
 
     let photo_url = profile?.photo_url || null;
 
-    // If a new image file was selected
     if (updates.photoFile) {
       const file = updates.photoFile;
       const ext = file.name.split(".").pop();
@@ -175,7 +1343,7 @@ function App() {
   async function fetchPosts() {
     const { data, error } = await supabase
       .from("posts")
-      .select("id, content, created_at")
+      .select("*")
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -186,14 +1354,11 @@ function App() {
   }
 
   async function createPost() {
-    if (!session?.user) return;
-
-    const content = newPost.trim();
-    if (!content) return;
+    if (!session?.user || !newPost.trim()) return;
 
     const { error } = await supabase.from("posts").insert({
-      content,
       user_id: session.user.id,
+      content: newPost.trim(),
     });
 
     if (error) {
@@ -206,9 +1371,12 @@ function App() {
 
   // ---------- HIGHLIGHTS ----------
   async function fetchHighlights() {
+    if (!session?.user) return;
+
     const { data, error } = await supabase
       .from("highlights")
       .select("*")
+      .eq("user_id", session.user.id)
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -219,33 +1387,36 @@ function App() {
   }
 
   async function uploadHighlight() {
-    if (!session?.user || !highlightFile) return;
+    if (!session?.user || !highlightFile || !highlightTitle.trim()) return;
 
     const file = highlightFile;
     const ext = file.name.split(".").pop();
     const fileName = `${session.user.id}-${Date.now()}.${ext}`;
+    const filePath = fileName;
 
     const { error: uploadError } = await supabase.storage
       .from("highlights")
-      .upload(fileName, file);
+      .upload(filePath, file);
 
     if (uploadError) {
-      alert(uploadError.message);
+      alert("Error uploading highlight: " + uploadError.message);
       return;
     }
 
-    const { data: publicData } = supabase.storage
+    const { data: publicUrlData } = supabase.storage
       .from("highlights")
-      .getPublicUrl(fileName);
+      .getPublicUrl(filePath);
+
+    const video_url = publicUrlData.publicUrl;
 
     const { error: insertError } = await supabase.from("highlights").insert({
       user_id: session.user.id,
-      title: highlightTitle,
-      video_url: publicData.publicUrl,
+      title: highlightTitle.trim(),
+      video_url,
     });
 
     if (insertError) {
-      alert(insertError.message);
+      alert("Error saving highlight record: " + insertError.message);
     } else {
       setHighlightTitle("");
       setHighlightFile(null);
@@ -253,994 +1424,186 @@ function App() {
     }
   }
 
-  // ---------- SEARCH & FOLLOW ----------
-  async function fetchAllProfiles() {
-    const { data, error } = await supabase
+  // ---------- PUBLIC PROFILE ----------
+  async function fetchPublicProfileData(userId) {
+    const { data: p, error: pErr } = await supabase
       .from("profiles")
       .select("*")
-      .order("full_name", { ascending: true });
+      .eq("id", userId)
+      .single();
+
+    if (pErr) {
+      console.error("Error loading public profile:", pErr);
+    } else {
+      setPublicProfileUser(p);
+    }
+
+    const { data: hData, error: hErr } = await supabase
+      .from("highlights")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false });
+
+    if (hErr) {
+      console.error("Error loading public highlights:", hErr);
+    } else {
+      setPublicProfileHighlights(hData || []);
+    }
+  }
+
+  function openPublicProfile(userId) {
+    setPublicProfileUser(null);
+    setPublicProfileHighlights([]);
+    setView("publicProfile");
+    fetchPublicProfileData(userId);
+  }
+
+  // ---------- ALL PROFILES (search, messages) ----------
+  async function fetchAllProfiles() {
+    const { data, error } = await supabase.from("profiles").select("*");
 
     if (error) {
-      console.error("Error loading profiles:", error);
+      console.error("Error loading all profiles:", error);
     } else {
       setAllProfiles(data || []);
     }
   }
 
-  async function fetchFollowing() {
-    if (!session?.user) return;
+  // ---------- EFFECTS ----------
+ useEffect(() => {
+  async function init() {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
 
-    const { data, error } = await supabase
-      .from("follows")
-      .select("followee_id")
-      .eq("follower_id", session.user.id);
-
-    if (error) {
-      console.error("Error loading follows:", error);
-    } else {
-      setFollowingIds((data || []).map((r) => r.followee_id));
+    if (!forceLoggedOut) {
+      setSession(session);
     }
-  }
+    setLoading(false);
 
-  async function followUser(targetUserId) {
-    if (!session?.user) return;
-    if (followingIds.includes(targetUserId)) return;
-
-    const { error } = await supabase.from("follows").insert({
-      follower_id: session.user.id,
-      followee_id: targetUserId,
+    supabase.auth.onAuthStateChange((_event, newSession) => {
+      if (!forceLoggedOut) {
+        setSession(newSession);
+      }
     });
-
-    if (error) {
-      alert(error.message);
-    } else {
-      setFollowingIds((prev) => [...prev, targetUserId]);
-    }
   }
+  init();
+}, [forceLoggedOut]);
 
-  async function unfollowUser(targetUserId) {
-    if (!session?.user) return;
-
-    const { error } = await supabase
-      .from("follows")
-      .delete()
-      .eq("follower_id", session.user.id)
-      .eq("followee_id", targetUserId);
-
-    if (error) {
-      alert(error.message);
-    } else {
-      setFollowingIds((prev) => prev.filter((id) => id !== targetUserId));
-    }
-  }
-
-  // ---------- MESSAGES ----------
-  async function openChatWith(userId) {
-    setSelectedChatUserId(userId);
-    await fetchMessagesWith(userId);
-  }
-
-  async function fetchMessagesWith(userId) {
-    if (!session?.user || !userId) return;
-
-    const me = session.user.id;
-
-    const { data, error } = await supabase
-      .from("messages")
-      .select("*")
-      .or(
-        `and(sender_id.eq.${me},receiver_id.eq.${userId}),and(sender_id.eq.${userId},receiver_id.eq.${me})`
-      )
-      .order("created_at", { ascending: true });
-
-    if (error) {
-      console.error("Error loading messages:", error);
-    } else {
-      setMessages(data || []);
-    }
-  }
-
-  async function sendMessage() {
-    if (!session?.user || !selectedChatUserId) return;
-
-    const content = newMessage.trim();
-    if (!content) return;
-
-    const { error } = await supabase.from("messages").insert({
-      sender_id: session.user.id,
-      receiver_id: selectedChatUserId,
-      content,
-    });
-
-    if (error) {
-      alert(error.message);
-    } else {
-      setNewMessage("");
-      fetchMessagesWith(selectedChatUserId);
-    }
-  }
 
   // ---------- RENDER ----------
-  if (loading) {
-    return (
-      <div style={styles.page}>
-        <h2>Loading...</h2>
-      </div>
-    );
-  }
+ if (loading) {
+  return (
+    <div style={styles.page}>
+      <h2>Loading...</h2>
+    </div>
+  );
+}
 
-  if (!session) {
-    return <AuthScreen signIn={signIn} signUp={signUp} />;
-  }
+if (!session || forceLoggedOut) {
+  return (
+    <AuthScreen
+      signIn={signIn}
+      signUp={signUp}
+      resetPassword={resetPassword}
+    />
+  );
+}
+
+  const currentUserId = session.user.id;
 
   return (
     <div style={styles.page}>
-      <header style={styles.header}>
-        <h2>SportsLink</h2>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <button
-            style={view === "feed" ? styles.tabActive : styles.tab}
-            onClick={() => setView("feed")}
-          >
-            Feed
-          </button>
-          <button
-            style={view === "profile" ? styles.tabActive : styles.tab}
-            onClick={() => setView("profile")}
-          >
-            Profile
-          </button>
-          <button
-            style={view === "search" ? styles.tabActive : styles.tab}
-            onClick={() => setView("search")}
-          >
-            Search
-          </button>
-          <button
-            style={view === "messages" ? styles.tabActive : styles.tab}
-            onClick={() => setView("messages")}
-          >
-            Messages
-          </button>
-          <button style={styles.logout} onClick={signOut}>
-            Logout
-          </button>
-        </div>
-      </header>
-
-      {view === "profile" && (
-        <ProfileView
-          profile={profile}
-          onSave={saveProfile}
-          email={session.user.email}
-        />
-      )}
-
-      {view === "feed" && (
-        <FeedView
-          posts={posts}
-          newPost={newPost}
-          setNewPost={setNewPost}
-          createPost={createPost}
-          highlights={highlights}
-          highlightTitle={highlightTitle}
-          setHighlightTitle={setHighlightTitle}
-          setHighlightFile={setHighlightFile}
-          uploadHighlight={uploadHighlight}
-        />
-      )}
-
-      {view === "search" && (
-        <SearchView
-          profiles={allProfiles}
-          filters={searchFilters}
-          setFilters={setSearchFilters}
-          currentUserId={session.user.id}
-          followingIds={followingIds}
-          onFollow={followUser}
-          onUnfollow={unfollowUser}
-          onOpenChat={openChatWith}
-          setView={setView}
-        />
-      )}
-
-      {view === "messages" && (
-        <MessagesView
-          profiles={allProfiles}
-          currentUserId={session.user.id}
-          selectedChatUserId={selectedChatUserId}
-          openChatWith={openChatWith}
-          messages={messages}
-          newMessage={newMessage}
-          setNewMessage={setNewMessage}
-          sendMessage={sendMessage}
-        />
-      )}
-    </div>
-  );
-}
-
-// ---------- AUTH SCREEN ----------
-function AuthScreen({ signIn, signUp }) {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-
-  return (
-    <div style={styles.page}>
-      <div style={styles.container}>
-        <h1>SportsLink</h1>
-        <p style={{ color: "#9ca3af", marginBottom: 20 }}>
-          Sign in or create an account to connect players, coaches, and clubs.
-        </p>
-
-        <input
-          style={styles.input}
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
-
-        <input
-          style={styles.input}
-          type="password"
-          placeholder="Password (min 6 chars)"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
-
-        <button
-          style={styles.buttonPrimary}
-          onClick={() => signIn(email, password)}
-        >
-          Log In
-        </button>
-
-        <button
-          style={styles.buttonSecondary}
-          onClick={() => signUp(email, password)}
-        >
-          Sign Up
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ---------- PROFILE VIEW ----------
-function ProfileView({ profile, onSave, email }) {
-  const [fullName, setFullName] = useState(profile?.full_name || "");
-  const [role, setRole] = useState(profile?.role || "Player");
-  const [position, setPosition] = useState(profile?.position || "");
-  const [location, setLocation] = useState(profile?.location || "");
-  const [bio, setBio] = useState(profile?.bio || "");
-
-  const [country, setCountry] = useState(profile?.country || "");
-  const [age, setAge] = useState(profile?.age || "");
-  const [heightCm, setHeightCm] = useState(profile?.height_cm || "");
-  const [preferredFoot, setPreferredFoot] = useState(
-    profile?.preferred_foot || "Right"
-  );
-  const [mainPosition, setMainPosition] = useState(
-    profile?.main_position || ""
-  );
-  const [secondaryPosition, setSecondaryPosition] = useState(
-    profile?.secondary_position || ""
-  );
-  const [clubName, setClubName] = useState(profile?.club_name || "");
-  const [achievements, setAchievements] = useState(
-    profile?.achievements || ""
-  );
-  const [photoFile, setPhotoFile] = useState(null);
-
-  return (
-    <div style={styles.container}>
-      <h2>Your Profile</h2>
-
-      {profile?.photo_url && (
-        <img
-          src={profile.photo_url}
-          alt="Profile"
-          style={{
-            width: 80,
-            height: 80,
-            borderRadius: "50%",
-            objectFit: "cover",
-            marginBottom: 15,
-          }}
-        />
-      )}
-
-      <label style={styles.label}>Email (login)</label>
-      <div style={{ marginBottom: 10 }}>{email}</div>
-
-      <label style={styles.label}>Full Name</label>
-      <input
-        style={styles.input}
-        value={fullName}
-        onChange={(e) => setFullName(e.target.value)}
-      />
-
-      <label style={styles.label}>Role</label>
-      <select
-        style={styles.input}
-        value={role}
-        onChange={(e) => setRole(e.target.value)}
-      >
-        <option>Player</option>
-        <option>Coach</option>
-        <option>Scout</option>
-        <option>Club</option>
-      </select>
-
-      <label style={styles.label}>Position</label>
-      <input
-        style={styles.input}
-        placeholder="e.g. Left Winger, Striker"
-        value={position}
-        onChange={(e) => setPosition(e.target.value)}
-      />
-
-      <label style={styles.label}>Location</label>
-      <input
-        style={styles.input}
-        placeholder="City, Country"
-        value={location}
-        onChange={(e) => setLocation(e.target.value)}
-      />
-
-      <label style={styles.label}>Country</label>
-      <input
-        style={styles.input}
-        value={country}
-        onChange={(e) => setCountry(e.target.value)}
-      />
-
-      <label style={styles.label}>Age</label>
-      <input
-        style={styles.input}
-        type="number"
-        value={age}
-        onChange={(e) => setAge(e.target.value)}
-      />
-
-      <label style={styles.label}>Height (cm)</label>
-      <input
-        style={styles.input}
-        type="number"
-        value={heightCm}
-        onChange={(e) => setHeightCm(e.target.value)}
-      />
-
-      <label style={styles.label}>Preferred Foot</label>
-      <select
-        style={styles.input}
-        value={preferredFoot}
-        onChange={(e) => setPreferredFoot(e.target.value)}
-      >
-        <option>Right</option>
-        <option>Left</option>
-        <option>Both</option>
-      </select>
-
-      <label style={styles.label}>Main Position</label>
-      <input
-        style={styles.input}
-        placeholder="e.g. Striker, CB, LW"
-        value={mainPosition}
-        onChange={(e) => setMainPosition(e.target.value)}
-      />
-
-      <label style={styles.label}>Secondary Position</label>
-      <input
-        style={styles.input}
-        placeholder="e.g. RW, LB"
-        value={secondaryPosition}
-        onChange={(e) => setSecondaryPosition(e.target.value)}
-      />
-
-      <label style={styles.label}>Club / Academy</label>
-      <input
-        style={styles.input}
-        value={clubName}
-        onChange={(e) => setClubName(e.target.value)}
-      />
-
-      <label style={styles.label}>Achievements</label>
-      <textarea
-        style={styles.textarea}
-        placeholder="e.g. Won Nationwide League Div 2 2024..."
-        value={achievements}
-        onChange={(e) => setAchievements(e.target.value)}
-      />
-
-      <label style={styles.label}>Bio</label>
-      <textarea
-        style={styles.textarea}
-        value={bio}
-        onChange={(e) => setBio(e.target.value)}
-      />
-
-      <label style={styles.label}>Profile Photo</label>
-      <input
-        type="file"
-        accept="image/*"
-        style={{ marginBottom: 15 }}
-        onChange={(e) => setPhotoFile(e.target.files?.[0] || null)}
-      />
-
-      <button
-        style={{ ...styles.buttonPrimary, marginTop: 10 }}
-        onClick={() =>
-          onSave({
-            full_name: fullName,
-            role,
-            position,
-            location,
-            bio,
-            country,
-            age: age ? Number(age) : null,
-            height_cm: heightCm ? Number(heightCm) : null,
-            preferred_foot: preferredFoot,
-            main_position: mainPosition,
-            secondary_position: secondaryPosition,
-            club_name: clubName,
-            achievements,
-            photoFile,
-          })
-        }
-      >
-        Save Profile
-      </button>
-    </div>
-  );
-}
-
-// ---------- FEED VIEW ----------
-function FeedView({
-  posts,
-  newPost,
-  setNewPost,
-  createPost,
-  highlights,
-  highlightTitle,
-  setHighlightTitle,
-  setHighlightFile,
-  uploadHighlight,
-}) {
-  const [highlightPreview, setHighlightPreview] = useState(null);
-  const [highlightError, setHighlightError] = useState("");
-
-  const handleHighlightFileChange = (e) => {
-    const file = e.target.files?.[0] || null;
-    setHighlightError("");
-    setHighlightFile(file);
-    setHighlightPreview(null);
-
-    if (!file) return;
-
-    // 1) Size limit: 50 MB
-    const maxMb = 50;
-    const maxBytes = maxMb * 1024 * 1024;
-    if (file.size > maxBytes) {
-      setHighlightError(`File too big. Max size is ${maxMb} MB.`);
-      setHighlightFile(null);
-      return;
-    }
-
-    // 2) Type check: allow MP4 + MOV
-    const allowedTypes = ["video/mp4", "video/quicktime"];
-    if (!allowedTypes.includes(file.type)) {
-      setHighlightError("Only MP4 or MOV videos are allowed.");
-      setHighlightFile(null);
-      return;
-    }
-
-    // 3) MOV compatibility note
-    if (file.type === "video/quicktime") {
-      setHighlightError(
-        "Note: MOV works, but some phone videos may play audio only in some browsers."
-      );
-    }
-
-    // 4) Preview URL
-    const url = URL.createObjectURL(file);
-    setHighlightPreview(url);
-  };
-
-  return (
-    <div style={styles.container}>
-      <h2>Feed</h2>
-      <p style={{ color: "#9ca3af", fontSize: 14 }}>
-        Share your latest match, training, or opportunity.
-      </p>
-
-      <textarea
-        style={styles.textarea}
-        placeholder="e.g. Scored 2 goals today, open to trials this summer..."
-        value={newPost}
-        onChange={(e) => setNewPost(e.target.value)}
-      />
-
-      <button style={styles.buttonPrimary} onClick={createPost}>
-        Post
-      </button>
-
-      <h3 style={{ marginTop: 30 }}>Upload Highlight</h3>
-      <input
-        style={styles.input}
-        placeholder="Title (e.g. Hat-trick vs XYZ FC)"
-        value={highlightTitle}
-        onChange={(e) => setHighlightTitle(e.target.value)}
-      />
-
-      {/* Preview (if selected) */}
-      {highlightPreview && (
-        <video
-          src={highlightPreview}
-          controls
-          style={{ width: "100%", marginBottom: 10, borderRadius: 8 }}
-        />
-      )}
-
-      <input
-        type="file"
-        accept="video/mp4, video/quicktime"
-        style={{ marginBottom: 10 }}
-        onChange={handleHighlightFileChange}
-      />
-
-      {/* Error / warning message */}
-      {highlightError && (
-        <div
-          style={{
-            color: "#f97316",
-            fontSize: 13,
-            marginBottom: 10,
-            maxWidth: "100%",
-          }}
-        >
-          {highlightError}
-        </div>
-      )}
-
-      <button style={styles.buttonPrimary} onClick={uploadHighlight}>
-        Upload Highlight
-      </button>
-
-      <div style={{ marginTop: 20 }}>
-        {highlights.map((h) => (
-          <div key={h.id} style={styles.post}>
-            <strong>{h.title}</strong>
-            <br />
-            <video
-              src={h.video_url}
-              controls
-              style={{ width: "100%", marginTop: 8, borderRadius: 8 }}
-            />
-            <small style={{ color: "#9ca3af" }}>
-              {new Date(h.created_at).toLocaleString()}
-            </small>
-          </div>
-        ))}
-      </div>
-
-      <div style={{ marginTop: 30 }}>
-        <h3>Recent Posts</h3>
-        {posts.length === 0 && (
-          <div style={{ color: "#9ca3af" }}>No posts yet. Be the first.</div>
-        )}
-        {posts.map((p) => (
-          <div key={p.id} style={styles.post}>
-            <p>{p.content}</p>
-            <small style={{ color: "#9ca3af" }}>
-              {new Date(p.created_at).toLocaleString()}
-            </small>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ---------- SEARCH VIEW ----------
-function SearchView({
-  profiles,
-  filters,
-  setFilters,
-  currentUserId,
-  followingIds,
-  onFollow,
-  onUnfollow,
-  onOpenChat,
-  setView,
-}) {
-  const filtered = profiles.filter((p) => {
-    if (!p) return false;
-    if (p.id === currentUserId) return false;
-
-    if (
-      filters.country &&
-      !(p.country || "").toLowerCase().includes(filters.country.toLowerCase())
-    ) {
-      return false;
-    }
-
-    if (filters.position) {
-      const pos = filters.position.toLowerCase();
-      const mainPos = (p.main_position || "").toLowerCase();
-      const secPos = (p.secondary_position || "").toLowerCase();
-      if (!mainPos.includes(pos) && !secPos.includes(pos)) {
-        return false;
-      }
-    }
-
-    if (filters.minAge && (!p.age || p.age < Number(filters.minAge))) {
-      return false;
-    }
-    if (filters.maxAge && (!p.age || p.age > Number(filters.maxAge))) {
-      return false;
-    }
-
-    return true;
-  });
-
-  return (
-    <div style={styles.container}>
-      <h2>Search Players</h2>
-
-      <label style={styles.label}>Country</label>
-      <input
-        style={styles.input}
-        value={filters.country}
-        onChange={(e) =>
-          setFilters({ ...filters, country: e.target.value })
-        }
-      />
-
-      <label style={styles.label}>Position</label>
-      <input
-        style={styles.input}
-        placeholder="e.g. Striker, CB, LW"
-        value={filters.position}
-        onChange={(e) =>
-          setFilters({ ...filters, position: e.target.value })
-        }
-      />
-
-      <div style={{ display: "flex", gap: 10 }}>
-        <div style={{ flex: 1 }}>
-          <label style={styles.label}>Min age</label>
-          <input
-            style={styles.input}
-            type="number"
-            value={filters.minAge}
-            onChange={(e) =>
-              setFilters({ ...filters, minAge: e.target.value })
-            }
-          />
-        </div>
-        <div style={{ flex: 1 }}>
-          <label style={styles.label}>Max age</label>
-          <input
-            style={styles.input}
-            type="number"
-            value={filters.maxAge}
-            onChange={(e) =>
-              setFilters({ ...filters, maxAge: e.target.value })
-            }
-          />
-        </div>
-      </div>
-
-      <div style={{ marginTop: 20 }}>
-        {filtered.length === 0 && (
-          <div style={{ color: "#9ca3af" }}>No players match your filters.</div>
-        )}
-
-        {filtered.map((p) => {
-          const isFollowing = followingIds.includes(p.id);
-          return (
-            <div key={p.id} style={styles.post}>
-              <div style={{ display: "flex", gap: 10 }}>
-                {p.photo_url && (
-                  <img
-                    src={p.photo_url}
-                    alt={p.full_name || "Player"}
-                    style={{
-                      width: 50,
-                      height: 50,
-                      borderRadius: "50%",
-                      objectFit: "cover",
-                    }}
-                  />
-                )}
-                <div style={{ flex: 1 }}>
-                  <strong>{p.full_name || "Unnamed Player"}</strong>
-                  <div>{p.country}</div>
-                  <div>
-                    {p.main_position}
-                    {p.secondary_position
-                      ? ` / ${p.secondary_position}`
-                      : ""}
-                  </div>
-                  <div>
-                    Age: {p.age || "N/A"} | Foot:{" "}
-                    {p.preferred_foot || "N/A"}
-                  </div>
-                  <div>Club: {p.club_name || "-"}</div>
-                  {p.achievements && (
-                    <div style={{ fontSize: 12, marginTop: 4 }}>
-                      <em>{p.achievements}</em>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
-                {!isFollowing ? (
-                  <button
-                    style={styles.buttonPrimary}
-                    onClick={() => onFollow(p.id)}
-                  >
-                    Follow
-                  </button>
-                ) : (
-                  <button
-                    style={styles.buttonSecondary}
-                    onClick={() => onUnfollow(p.id)}
-                  >
-                    Unfollow
-                  </button>
-                )}
-
-                <button
-                  style={styles.buttonSecondary}
-                  onClick={() => {
-                    onOpenChat(p.id);
-                    setView("messages");
-                  }}
-                >
-                  Message
-                </button>
+      <div style={styles.appShell}>
+        <header style={styles.header}>
+          <div style={styles.brand}>
+            <div style={styles.logoCircle}>SL</div>
+            <div>
+              <div style={styles.brandTextMain}>SportsLink</div>
+              <div style={styles.brandTextSub}>
+                Football profiles • Highlights • Connections
               </div>
             </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-// ---------- MESSAGES VIEW ----------
-function MessagesView({
-  profiles,
-  currentUserId,
-  selectedChatUserId,
-  openChatWith,
-  messages,
-  newMessage,
-  setNewMessage,
-  sendMessage,
-}) {
-  const otherUsers = profiles.filter((p) => p && p.id !== currentUserId);
-  const activeUser =
-    profiles.find((p) => p && p.id === selectedChatUserId) || null;
-
-  return (
-    <div style={styles.container}>
-      <h2>Messages</h2>
-
-      <div style={{ display: "flex", gap: 16 }}>
-        {/* Left: list of users to chat with */}
-        <div style={{ flex: 1 }}>
-          <h3 style={{ fontSize: 16 }}>Players & Coaches</h3>
-          {otherUsers.length === 0 && (
-            <div style={{ color: "#9ca3af" }}>
-              No other profiles yet. Ask others to sign up.
-            </div>
-          )}
-          {otherUsers.map((u) => (
-            <div
-              key={u.id}
-              style={{
-                ...styles.post,
-                cursor: "pointer",
-                border:
-                  selectedChatUserId === u.id
-                    ? "1px solid #22c55e"
-                    : "1px solid transparent",
-              }}
-              onClick={() => openChatWith(u.id)}
+          </div>
+          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            <button
+              style={view === "feed" ? styles.tabActive : styles.tab}
+              onClick={() => setView("feed")}
             >
-              <strong>{u.full_name || "Unnamed"}</strong>
-              <div>{u.main_position}</div>
-              <div style={{ fontSize: 12, color: "#9ca3af" }}>
-                {u.country} {u.club_name ? `• ${u.club_name}` : ""}
-              </div>
-            </div>
-          ))}
-        </div>
+              Feed
+            </button>
+            <button
+              style={view === "search" ? styles.tabActive : styles.tab}
+              onClick={() => setView("search")}
+            >
+              Search
+            </button>
+            <button
+              style={view === "messages" ? styles.tabActive : styles.tab}
+              onClick={() => setView("messages")}
+            >
+              Messages
+            </button>
+            <button
+              style={view === "profile" ? styles.tabActive : styles.tab}
+              onClick={() => setView("profile")}
+            >
+              Profile
+            </button>
+            <button style={styles.logout} onClick={signOut}>
+              Logout
+            </button>
+          </div>
+        </header>
 
-        {/* Right: chat window */}
-        <div style={{ flex: 2 }}>
-          {activeUser ? (
-            <>
-              <h3 style={{ fontSize: 16 }}>
-                Chat with {activeUser.full_name || "Player"}
-              </h3>
-              <div
-                style={{
-                  border: "1px solid #334155",
-                  borderRadius: 8,
-                  padding: 10,
-                  height: 260,
-                  overflowY: "auto",
-                  background: "#020617",
-                  marginBottom: 10,
-                }}
-              >
-                {messages.length === 0 && (
-                  <div style={{ color: "#9ca3af" }}>
-                    No messages yet. Say hello!
-                  </div>
-                )}
-                {messages.map((m) => (
-                  <div
-                    key={m.id}
-                    style={{
-                      marginBottom: 8,
-                      textAlign:
-                        m.sender_id === currentUserId ? "right" : "left",
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: "inline-block",
-                        padding: "6px 10px",
-                        borderRadius: 10,
-                        background:
-                          m.sender_id === currentUserId
-                            ? "#22c55e"
-                            : "#1e293b",
-                        color:
-                          m.sender_id === currentUserId ? "#022c22" : "white",
-                      }}
-                    >
-                      {m.content}
-                    </div>
-                    <div
-                      style={{
-                        fontSize: 10,
-                        color: "#9ca3af",
-                        marginTop: 2,
-                      }}
-                    >
-                      {new Date(m.created_at).toLocaleString()}
-                    </div>
-                  </div>
-                ))}
-              </div>
+        {view === "profile" && (
+          <ProfileView
+            profile={profile}
+            onSave={saveProfile}
+            email={session.user.email}
+          />
+        )}
 
-              <textarea
-                style={styles.textarea}
-                placeholder="Type a message..."
-                value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
-              />
+        {view === "feed" && (
+          <FeedView
+            posts={posts}
+            newPost={newPost}
+            setNewPost={setNewPost}
+            createPost={createPost}
+            highlights={highlights}
+            highlightTitle={highlightTitle}
+            setHighlightTitle={setHighlightTitle}
+            setHighlightFile={setHighlightFile}
+            uploadHighlight={uploadHighlight}
+          />
+        )}
 
-              <button style={styles.buttonPrimary} onClick={sendMessage}>
-                Send
-              </button>
-            </>
-          ) : (
-            <div style={{ color: "#9ca3af", marginTop: 20 }}>
-              Select a player or coach on the left to start chatting.
-            </div>
-          )}
-        </div>
+        {view === "publicProfile" && (
+          <PublicProfileView
+            profile={publicProfileUser}
+            highlights={publicProfileHighlights}
+          />
+        )}
+
+        {view === "search" && (
+          <SearchView
+            profiles={allProfiles}
+            currentUserId={currentUserId}
+            onOpenProfile={openPublicProfile}
+          />
+        )}
+
+        {view === "messages" && (
+          <MessagesView
+            profiles={allProfiles}
+            currentUserId={currentUserId}
+            messages={messages}
+            setMessages={setMessages}
+          />
+        )}
       </div>
     </div>
   );
 }
-
-// ---------- STYLES ----------
-const styles = {
-  page: {
-    minHeight: "100vh",
-    padding: 20,
-    background: "#0f172a",
-    color: "white",
-  },
-  header: {
-    display: "flex",
-    justifyContent: "space-between",
-    marginBottom: 20,
-    alignItems: "center",
-  },
-  container: {
-    maxWidth: 900,
-    margin: "0 auto",
-  },
-  input: {
-    width: "100%",
-    padding: 10,
-    marginTop: 5,
-    marginBottom: 15,
-    borderRadius: 8,
-    border: "1px solid #334155",
-    background: "#1e293b",
-    color: "white",
-    fontSize: 14,
-  },
-  textarea: {
-    width: "100%",
-    padding: 10,
-    minHeight: 80,
-    borderRadius: 8,
-    border: "1px solid #334155",
-    background: "#1e293b",
-    color: "white",
-    marginBottom: 15,
-    fontSize: 14,
-  },
-  buttonPrimary: {
-    padding: 10,
-    background: "#22c55e",
-    border: "none",
-    borderRadius: 8,
-    marginBottom: 10,
-    cursor: "pointer",
-    fontWeight: "bold",
-    color: "#022c22",
-  },
-  buttonSecondary: {
-    padding: 10,
-    background: "#475569",
-    border: "none",
-    borderRadius: 8,
-    marginBottom: 10,
-    cursor: "pointer",
-    fontWeight: "bold",
-    color: "white",
-  },
-  tab: {
-    background: "#475569",
-    padding: "6px 12px",
-    borderRadius: 6,
-    border: "none",
-    cursor: "pointer",
-    fontSize: 13,
-  },
-  tabActive: {
-    background: "#22c55e",
-    padding: "6px 12px",
-    borderRadius: 6,
-    border: "none",
-    cursor: "pointer",
-    fontSize: 13,
-    color: "#022c22",
-    fontWeight: "bold",
-  },
-  logout: {
-    background: "#ef4444",
-    padding: "6px 12px",
-    borderRadius: 6,
-    border: "none",
-    cursor: "pointer",
-    fontSize: 13,
-  },
-  label: {
-    fontSize: 13,
-    color: "#cbd5f5",
-    marginBottom: 4,
-  },
-  post: {
-    background: "#1e293b",
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 10,
-  },
-};
 
 export default App;
