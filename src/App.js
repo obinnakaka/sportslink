@@ -2100,6 +2100,36 @@ useEffect(() => {
   }
 }, [session, forceLoggedOut]);
 
+// ---------- REALTIME MESSAGES SUBSCRIPTION ----------
+useEffect(() => {
+  if (!session?.user || forceLoggedOut) return;
+
+  const userId = session.user.id;
+
+  const channel = supabase
+    .channel("messages-realtime")
+    .on(
+      "postgres_changes",
+      { event: "INSERT", schema: "public", table: "messages" },
+      (payload) => {
+        const msg = payload.new;
+        // Only care about messages that involve this user
+        if (msg.from_id === userId || msg.to_id === userId) {
+          setMessages((prev) => {
+            if (prev.some((m) => m.id === msg.id)) return prev;
+            return [...prev, msg];
+          });
+        }
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}, [session, forceLoggedOut]);
+
+
 // Load favorites & saved searches from localStorage on first load
 useEffect(() => {
   try {
