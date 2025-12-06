@@ -425,6 +425,7 @@ function ProfileView({ profile, onSave, email }) {
     cover_photo: profile?.cover_photo || "",
   });
   const [photoFile, setPhotoFile] = useState(null);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     setForm({
@@ -447,46 +448,140 @@ function ProfileView({ profile, onSave, email }) {
     setForm((f) => ({ ...f, [name]: value }));
   }
 
+  function validate() {
+    const missing = [];
+
+    if (!form.full_name.trim()) missing.push("Full name");
+    if (!form.nationality.trim()) missing.push("Nationality");
+    if (!form.position.trim()) missing.push("Position");
+    if (!form.dob) missing.push("Date of birth");
+
+    if (missing.length > 0) {
+      setError(
+        `Please fill in: ${missing.join(", ")}. These are important for your profile.`
+      );
+      return false;
+    }
+
+    // Basic DOB sanity check (no future dates)
+    if (form.dob) {
+      const dobDate = new Date(form.dob);
+      const today = new Date();
+      if (dobDate > today) {
+        setError("Date of birth cannot be in the future.");
+        return false;
+      }
+    }
+
+    setError("");
+    return true;
+  }
+
   function handleSubmit(e) {
     e.preventDefault();
+    if (!validate()) return;
     onSave({ ...form, photoFile });
   }
 
-  const fieldsFilled = Object.values(form).filter((v) => v).length;
-  const completion = Math.round((fieldsFilled / 11) * 100);
+  // Profile completeness (simple: count non-empty fields)
+  const fieldsForCompletion = [
+    "full_name",
+    "bio",
+    "nationality",
+    "position",
+    "club",
+    "height",
+    "weight",
+    "dob",
+    "preferred_foot",
+    "summary",
+  ];
+  const filledCount = fieldsForCompletion.filter((key) => {
+    const v = form[key];
+    return v !== undefined && String(v).trim() !== "";
+  }).length;
+  const completion = Math.round(
+    (filledCount / fieldsForCompletion.length) * 100
+  );
 
   return (
     <div style={styles.container}>
-      <h2 style={styles.sectionHeader}>My Profile</h2>
-      <p style={styles.sectionSub}>
-        Logged in as <strong>{email}</strong>. Complete your details so clubs
-        and coaches can quickly understand who you are.
+      <h2>My Profile</h2>
+      <p style={{ color: "#6b7280", marginBottom: 12 }}>
+        Logged in as {email}. Complete your profile so clubs and coaches can
+        quickly understand who you are.
       </p>
 
+      {/* Profile completeness bar */}
       <div
         style={{
           marginBottom: 16,
           padding: "8px 10px",
           borderRadius: 12,
           border: "1px solid #1f2937",
-          background: "rgba(15,23,42,0.9)",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          fontSize: 13,
+          background: "#020617",
         }}
       >
-        <span>Profile completeness</span>
-        <span style={{ fontWeight: 600 }}>{completion}%</span>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            marginBottom: 4,
+            fontSize: 13,
+          }}
+        >
+          <span>Profile completeness</span>
+          <span style={{ fontWeight: 600 }}>{completion}%</span>
+        </div>
+        <div
+          style={{
+            width: "100%",
+            height: 6,
+            borderRadius: 999,
+            background: "#111827",
+            overflow: "hidden",
+          }}
+        >
+          <div
+            style={{
+              width: `${completion}%`,
+              height: "100%",
+              background:
+                completion < 50
+                  ? "#f97316" // orange
+                  : completion < 80
+                  ? "#22c55e" // green
+                  : "#22c55e",
+              transition: "width 0.3s ease",
+            }}
+          />
+        </div>
       </div>
+
+      {/* Error message */}
+      {error && (
+        <div
+          style={{
+            marginBottom: 12,
+            padding: "8px 10px",
+            borderRadius: 8,
+            border: "1px solid #b91c1c",
+            background: "rgba(248,113,113,0.1)",
+            color: "#fecaca",
+            fontSize: 13,
+          }}
+        >
+          {error}
+        </div>
+      )}
 
       {profile?.photo_url && (
         <img
           src={profile.photo_url}
           alt=""
           style={{
-            width: 96,
-            height: 96,
+            width: 100,
+            height: 100,
             borderRadius: "50%",
             objectFit: "cover",
             marginBottom: 16,
@@ -495,95 +590,100 @@ function ProfileView({ profile, onSave, email }) {
       )}
 
       <form onSubmit={handleSubmit}>
-        <label style={{ fontSize: 13 }}>Profile photo</label>
+        <label>Profile photo</label>
         <input
           type="file"
           accept="image/*"
           onChange={(e) => setPhotoFile(e.target.files?.[0] || null)}
-          style={{ marginBottom: 16 }}
+          style={{ marginBottom: 12 }}
         />
 
-        <label style={{ fontSize: 13 }}>Full name</label>
+        <label>Full name *</label>
         <input
           style={styles.input}
           name="full_name"
           value={form.full_name}
           onChange={handleChange}
+          placeholder="e.g. John Doe"
         />
 
-        <label style={{ fontSize: 13 }}>Short bio</label>
+        <label>Short bio</label>
         <textarea
           style={styles.textarea}
           name="bio"
           value={form.bio}
           onChange={handleChange}
-          placeholder="Example: Left-footed winger with strong 1v1 ability and work rate."
+          placeholder="Example: Left-footed winger with strong 1v1 ability and high work rate."
         />
 
-        <label style={{ fontSize: 13 }}>Nationality</label>
+        <label>Nationality *</label>
         <input
           style={styles.input}
           name="nationality"
-          placeholder="e.g. Nigeria, Canada"
           value={form.nationality}
           onChange={handleChange}
+          placeholder="e.g. Nigeria, Canada"
         />
 
-        <label style={{ fontSize: 13 }}>Position</label>
+        <label>Position *</label>
         <input
           style={styles.input}
           name="position"
-          placeholder="e.g. ST, LW, CM, CB, GK"
           value={form.position}
           onChange={handleChange}
+          placeholder="e.g. ST, LW, RW, CM, DM, CB, GK"
         />
 
-        <label style={{ fontSize: 13 }}>Club / Academy</label>
+        <label>Club / Academy</label>
         <input
           style={styles.input}
           name="club"
           value={form.club}
           onChange={handleChange}
+          placeholder="e.g. City United Abuja"
         />
 
+        {/* Height / weight / preferred foot in one row */}
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fit,minmax(130px,1fr))",
-            gap: 12,
+            gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+            gap: 10,
           }}
         >
           <div>
-            <label style={{ fontSize: 13 }}>Height (cm)</label>
+            <label>Height (cm)</label>
             <input
               style={styles.input}
               name="height"
               value={form.height}
               onChange={handleChange}
+              placeholder="e.g. 180"
             />
           </div>
           <div>
-            <label style={{ fontSize: 13 }}>Weight (kg)</label>
+            <label>Weight (kg)</label>
             <input
               style={styles.input}
               name="weight"
               value={form.weight}
               onChange={handleChange}
+              placeholder="e.g. 75"
             />
           </div>
           <div>
-            <label style={{ fontSize: 13 }}>Preferred foot</label>
+            <label>Preferred foot</label>
             <input
               style={styles.input}
               name="preferred_foot"
-              placeholder="Left, Right, Both"
               value={form.preferred_foot}
               onChange={handleChange}
+              placeholder="Left, Right, Both"
             />
           </div>
         </div>
 
-        <label style={{ fontSize: 13, marginTop: 8 }}>Date of birth</label>
+        <label style={{ marginTop: 8, display: "block" }}>Date of birth *</label>
         <input
           style={styles.input}
           type="date"
@@ -592,21 +692,22 @@ function ProfileView({ profile, onSave, email }) {
           onChange={handleChange}
         />
 
-        <label style={{ fontSize: 13 }}>Summary / About</label>
+        <label>Summary / About</label>
         <textarea
           style={styles.textarea}
           name="summary"
           value={form.summary}
           onChange={handleChange}
-          placeholder="Tell clubs what makes you unique: style of play, strengths, key career moments."
+          placeholder="Tell clubs what makes you unique: style of play, strengths, key moments in your career."
         />
 
-        <label style={{ fontSize: 13 }}>Cover photo URL (optional)</label>
+        <label>Cover photo URL (optional)</label>
         <input
           style={styles.input}
           name="cover_photo"
           value={form.cover_photo}
           onChange={handleChange}
+          placeholder="Paste an image URL or leave blank"
         />
 
         <button type="submit" style={styles.buttonPrimaryFull}>
@@ -706,113 +807,474 @@ function FeedView({
 }
 
 // ---------- SEARCH VIEW ----------
-function SearchView({ profiles, currentUserId, onOpenProfile }) {
-  const [query, setQuery] = useState("");
+function SearchView(props) {
+  // support either props.profiles or props.allProfiles + optional currentUserId
+  const { profiles, allProfiles, currentUserId, onOpenProfile } = props;
 
-  const filtered = profiles.filter((p) => {
-    if (!p) return false;
-    if (p.id === currentUserId) return false;
-    if (!query.trim()) return true;
-    const name = p.full_name || p.username || p.email || "";
-    return name.toLowerCase().includes(query.toLowerCase());
+  const baseList = (profiles || allProfiles || []).filter(
+    (p) => p && p.id && p.id !== currentUserId
+  );
+
+  const [query, setQuery] = useState("");
+  const [position, setPosition] = useState("");
+  const [nationality, setNationality] = useState("");
+  const [minAge, setMinAge] = useState("");
+  const [maxAge, setMaxAge] = useState("");
+  const [sortBy, setSortBy] = useState("nameAsc"); // nameAsc | ageAsc | ageDesc | position | club
+
+  const [favorites, setFavorites] = useState([]);
+  const [savedSearches, setSavedSearches] = useState([]);
+
+  // Load favorites + saved searches from localStorage (so they persist)
+  useEffect(() => {
+    try {
+      const favRaw = window.localStorage.getItem("sl_favorites");
+      const savedRaw = window.localStorage.getItem("sl_saved_searches");
+      if (favRaw) setFavorites(JSON.parse(favRaw));
+      if (savedRaw) setSavedSearches(JSON.parse(savedRaw));
+    } catch (e) {
+      console.warn("Could not load saved search data", e);
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("sl_favorites", JSON.stringify(favorites));
+    } catch (e) {
+      console.warn("Could not save favorites", e);
+    }
+  }, [favorites]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        "sl_saved_searches",
+        JSON.stringify(savedSearches)
+      );
+    } catch (e) {
+      console.warn("Could not save searches", e);
+    }
+  }, [savedSearches]);
+
+  function toggleFavorite(id) {
+    setFavorites((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  }
+
+  function handleSaveSearch() {
+    // If no filters at all, don't save
+    if (
+      !query.trim() &&
+      !position &&
+      !nationality &&
+      !minAge &&
+      !maxAge &&
+      sortBy === "nameAsc"
+    ) {
+      return;
+    }
+
+    const labelParts = [];
+    if (query.trim()) labelParts.push(`"${query.trim()}"`);
+    if (position) labelParts.push(position.toUpperCase());
+    if (nationality) labelParts.push(nationality);
+    if (minAge || maxAge) {
+      labelParts.push(`Age ${minAge || "–"}–${maxAge || "–"}`);
+    }
+    labelParts.push(
+      sortBy === "nameAsc"
+        ? "Name ↑"
+        : sortBy === "ageAsc"
+        ? "Age ↑"
+        : sortBy === "ageDesc"
+        ? "Age ↓"
+        : sortBy === "position"
+        ? "Position"
+        : "Club"
+    );
+
+    const label = labelParts.join(" • ");
+
+    const newSearch = {
+      id: Date.now(),
+      label,
+      query,
+      position,
+      nationality,
+      minAge,
+      maxAge,
+      sortBy,
+    };
+
+    setSavedSearches((prev) => [newSearch, ...prev].slice(0, 10)); // keep last 10
+  }
+
+  function applySavedSearch(saved) {
+    setQuery(saved.query || "");
+    setPosition(saved.position || "");
+    setNationality(saved.nationality || "");
+    setMinAge(saved.minAge || "");
+    setMaxAge(saved.maxAge || "");
+    setSortBy(saved.sortBy || "nameAsc");
+  }
+
+  // ---- Filtering ----
+  const filtered = baseList.filter((p) => {
+    const name =
+      p.full_name || p.username || p.email || "";
+    const club = p.club || "";
+    const pos = p.position || "";
+    const nat = p.nationality || "";
+
+    if (
+      query.trim() &&
+      !(
+        name.toLowerCase().includes(query.toLowerCase()) ||
+        club.toLowerCase().includes(query.toLowerCase())
+      )
+    ) {
+      return false;
+    }
+
+    if (position && !pos.toLowerCase().includes(position.toLowerCase())) {
+      return false;
+    }
+
+    if (
+      nationality &&
+      !nat.toLowerCase().includes(nationality.toLowerCase())
+    ) {
+      return false;
+    }
+
+    // Age filter
+    const age = calculateAge(p.dob);
+    const ageIsNumber =
+      typeof age === "number" && !Number.isNaN(age);
+
+    if (minAge && ageIsNumber && age < Number(minAge)) {
+      return false;
+    }
+    if (maxAge && ageIsNumber && age > Number(maxAge)) {
+      return false;
+    }
+
+    // If age is missing and age filter is set, we keep them by default.
+    // If you prefer to hide players without DOB when age filter is used,
+    // you could change this logic.
+
+    return true;
+  });
+
+  // ---- Sorting ----
+  const sorted = [...filtered].sort((a, b) => {
+    const nameA =
+      (a.full_name || a.username || a.email || "").toLowerCase();
+    const nameB =
+      (b.full_name || b.username || b.email || "").toLowerCase();
+
+    const ageA = calculateAge(a.dob);
+    const ageB = calculateAge(b.dob);
+    const clubA = (a.club || "").toLowerCase();
+    const clubB = (b.club || "").toLowerCase();
+    const posA = (a.position || "").toLowerCase();
+    const posB = (b.position || "").toLowerCase();
+
+    if (sortBy === "ageAsc") {
+      return (ageA || 0) - (ageB || 0);
+    }
+    if (sortBy === "ageDesc") {
+      return (ageB || 0) - (ageA || 0);
+    }
+    if (sortBy === "position") {
+      if (posA < posB) return -1;
+      if (posA > posB) return 1;
+      return nameA.localeCompare(nameB);
+    }
+    if (sortBy === "club") {
+      if (clubA < clubB) return -1;
+      if (clubA > clubB) return 1;
+      return nameA.localeCompare(nameB);
+    }
+
+    // default: nameAsc
+    return nameA.localeCompare(nameB);
   });
 
   return (
     <div style={styles.container}>
-      <h2 style={styles.sectionHeader}>Search</h2>
-      <p style={styles.sectionSub}>
-        Discover players and coaches. Click a profile to view their public page.
+      <h2>Search players</h2>
+      <p style={{ color: "#6b7280", marginBottom: 16 }}>
+        Discover players and coaches. Use filters and sorting to narrow down
+        your search, then click a card to view the public profile.
       </p>
 
-      <input
-        style={styles.input}
-        placeholder="Search by name, club, nationality..."
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-      />
+      {/* Filters row */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "minmax(0,2.5fr) minmax(0,1.2fr) minmax(0,1.2fr) minmax(0,1fr) minmax(0,1fr)",
+          gap: 8,
+          marginBottom: 8,
+        }}
+      >
+        <input
+          style={styles.input}
+          placeholder="Search by name or club..."
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+        <input
+          style={styles.input}
+          placeholder="Position (e.g. ST, CM, CB)"
+          value={position}
+          onChange={(e) => setPosition(e.target.value)}
+        />
+        <input
+          style={styles.input}
+          placeholder="Nationality (e.g. Nigeria)"
+          value={nationality}
+          onChange={(e) => setNationality(e.target.value)}
+        />
+        <input
+          style={styles.input}
+          type="number"
+          min="10"
+          max="60"
+          placeholder="Min age"
+          value={minAge}
+          onChange={(e) => setMinAge(e.target.value)}
+        />
+        <input
+          style={styles.input}
+          type="number"
+          min="10"
+          max="60"
+          placeholder="Max age"
+          value={maxAge}
+          onChange={(e) => setMaxAge(e.target.value)}
+        />
+      </div>
 
-      {filtered.length === 0 ? (
-        <p style={{ ...styles.emptyText, marginTop: 16 }}>
-          No profiles match this search yet.
+      {/* Sorting + Save search */}
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          alignItems: "center",
+          gap: 8,
+          marginBottom: 16,
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{ fontSize: 13, color: "#9ca3af" }}>Sort by:</span>
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value)}
+            style={{
+              ...styles.input,
+              width: "auto",
+              paddingRight: 28,
+            }}
+          >
+            <option value="nameAsc">Name (A–Z)</option>
+            <option value="ageAsc">Age (youngest first)</option>
+            <option value="ageDesc">Age (oldest first)</option>
+            <option value="position">Position</option>
+            <option value="club">Club</option>
+          </select>
+        </div>
+
+        <button
+          type="button"
+          onClick={handleSaveSearch}
+          style={{
+            padding: "8px 12px",
+            borderRadius: 999,
+            border: "1px solid #4b5563",
+            background: "#020617",
+            color: "#e5e7eb",
+            fontSize: 13,
+            cursor: "pointer",
+          }}
+        >
+          Save this search
+        </button>
+      </div>
+
+      {/* Saved searches */}
+      {savedSearches.length > 0 && (
+        <div style={{ marginBottom: 16 }}>
+          <div
+            style={{
+              fontSize: 13,
+              color: "#9ca3af",
+              marginBottom: 6,
+            }}
+          >
+            Saved searches:
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {savedSearches.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => applySavedSearch(s)}
+                style={{
+                  padding: "4px 10px",
+                  borderRadius: 999,
+                  border: "1px solid #374151",
+                  background: "#020617",
+                  color: "#e5e7eb",
+                  fontSize: 12,
+                  cursor: "pointer",
+                }}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Results */}
+      {sorted.length === 0 ? (
+        <p style={{ color: "#9ca3af", marginTop: 12 }}>
+          No profiles match these filters yet.
         </p>
       ) : (
-        <div style={{ marginTop: 16, display: "grid", gap: 12 }}>
-          {filtered.map((p) => (
-            <div
-              key={p.id}
-              style={{
-                ...styles.postCard,
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                gap: 12,
-              }}
-              onClick={() => onOpenProfile(p.id)}
-            >
-              {p.photo_url && (
-                <img
-                  src={p.photo_url}
-                  alt=""
-                  style={{
-                    width: 52,
-                    height: 52,
-                    borderRadius: "50%",
-                    objectFit: "cover",
-                  }}
-                />
-              )}
-              <div>
-                <div style={{ fontWeight: 600, marginBottom: 4 }}>
-                  {p.full_name || p.username || p.email}
-                </div>
-                <div style={{ fontSize: 13, color: "#9ca3af", marginBottom: 4 }}>
-                  {p.position && (
-                    <span style={styles.pill}>{p.position}</span>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+            gap: 12,
+            marginTop: 8,
+          }}
+        >
+          {sorted.map((p) => {
+            const age = calculateAge(p.dob);
+            const isFavorite = favorites.includes(p.id);
+
+            return (
+              <div
+                key={p.id}
+                style={{
+                  ...styles.postCard,
+                  cursor: "pointer",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 8,
+                }}
+                onClick={() => onOpenProfile && onOpenProfile(p.id)}
+              >
+                <div style={{ display: "flex", gap: 10 }}>
+                  {p.photo_url && (
+                    <img
+                      src={p.photo_url}
+                      alt=""
+                      style={{
+                        width: 56,
+                        height: 56,
+                        borderRadius: "50%",
+                        objectFit: "cover",
+                      }}
+                    />
                   )}
-                  {p.club && <span style={styles.pill}>{p.club}</span>}
+                  <div style={{ flex: 1 }}>
+                    <div
+                      style={{
+                        fontWeight: 600,
+                        marginBottom: 2,
+                        fontSize: 15,
+                      }}
+                    >
+                      {p.full_name || p.username || p.email}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 12,
+                        color: "#9ca3af",
+                        marginBottom: 4,
+                      }}
+                    >
+                      {p.position && (
+                        <span style={styles.pill}>{p.position}</span>
+                      )}
+                      {p.club && <span style={styles.pill}>{p.club}</span>}
+                    </div>
+                    <div style={{ fontSize: 12, color: "#6b7280" }}>
+                      {p.nationality
+                        ? `${getFlagEmoji(p.nationality)} ${
+                            p.nationality
+                          }`
+                        : ""}
+                      {age !== "" && ` • Age ${age}`}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation(); // don’t open profile when toggling favorite
+                      toggleFavorite(p.id);
+                    }}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      fontSize: 18,
+                    }}
+                    title={
+                      isFavorite ? "Remove from favourites" : "Add to favourites"
+                    }
+                  >
+                    {isFavorite ? "★" : "☆"}
+                  </button>
                 </div>
-                <div style={{ fontSize: 12, color: "#6b7280" }}>
-                  {p.nationality
-                    ? `${getFlagEmoji(p.nationality)} ${p.nationality}`
-                    : ""}
-                </div>
+
+                {p.bio && (
+                  <div
+                    style={{
+                      fontSize: 12,
+                      color: "#9ca3af",
+                      maxHeight: 40,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                    }}
+                  >
+                    {p.bio}
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
   );
 }
 
-// ---------- MESSAGES VIEW (local only) ----------
-function MessagesView({ profiles, currentUserId, messages, setMessages }) {
+// ---------- MESSAGES VIEW (SUPABASE-BACKED) ----------
+function MessagesView({ profiles, currentUserId, messages, onSendMessage }) {
   const [selectedUserId, setSelectedUserId] = useState(null);
   const [draft, setDraft] = useState("");
 
-  const contacts = profiles.filter(
+  const contacts = (profiles || []).filter(
     (p) => p && p.id && p.id !== currentUserId
   );
 
   const selectedUser =
     contacts.find((p) => p.id === selectedUserId) || null;
 
-  const chatMessages = messages.filter(
+  const chatMessages = (messages || []).filter(
     (m) =>
-      (m.fromId === currentUserId && m.toId === selectedUserId) ||
-      (m.toId === currentUserId && m.fromId === selectedUserId)
+      (m.from_id === currentUserId && m.to_id === selectedUserId) ||
+      (m.to_id === currentUserId && m.from_id === selectedUserId)
   );
 
-  function sendMessage() {
+  function handleSend() {
     if (!draft.trim() || !selectedUserId || !currentUserId) return;
-    const newMessage = {
-      id: Date.now(),
-      fromId: currentUserId,
-      toId: selectedUserId,
-      text: draft.trim(),
-      createdAt: new Date().toISOString(),
-    };
-    setMessages((prev) => [...prev, newMessage]);
+    onSendMessage(selectedUserId, draft.trim());
     setDraft("");
   }
 
@@ -820,8 +1282,7 @@ function MessagesView({ profiles, currentUserId, messages, setMessages }) {
     <div style={styles.container}>
       <h2 style={styles.sectionHeader}>Messages</h2>
       <p style={styles.sectionSub}>
-        Direct messages are stored locally for now. Realtime chat can be wired
-        to Supabase later.
+        Real chat stored in Supabase. Select a profile to start a conversation.
       </p>
 
       <div
@@ -928,7 +1389,7 @@ function MessagesView({ profiles, currentUserId, messages, setMessages }) {
                   <p style={styles.emptyText}>No messages yet. Say hi 👋</p>
                 ) : (
                   chatMessages.map((m) => {
-                    const isMine = m.fromId === currentUserId;
+                    const isMine = m.from_id === currentUserId;
                     return (
                       <div
                         key={m.id}
@@ -949,6 +1410,20 @@ function MessagesView({ profiles, currentUserId, messages, setMessages }) {
                           }}
                         >
                           {m.text}
+                          <div
+                            style={{
+                              fontSize: 10,
+                              marginTop: 2,
+                              opacity: 0.7,
+                            }}
+                          >
+                            {m.created_at
+                              ? new Date(m.created_at).toLocaleTimeString(
+                                  [],
+                                  { hour: "2-digit", minute: "2-digit" }
+                                )
+                              : ""}
+                          </div>
                         </div>
                       </div>
                     );
@@ -965,7 +1440,7 @@ function MessagesView({ profiles, currentUserId, messages, setMessages }) {
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) {
                       e.preventDefault();
-                      sendMessage();
+                      handleSend();
                     }
                   }}
                 />
@@ -981,7 +1456,7 @@ function MessagesView({ profiles, currentUserId, messages, setMessages }) {
                     whiteSpace: "nowrap",
                     fontSize: 13,
                   }}
-                  onClick={sendMessage}
+                  onClick={handleSend}
                 >
                   Send
                 </button>
@@ -1208,7 +1683,8 @@ function App() {
   const [newPost, setNewPost] = useState("");
 
   // feed | profile | publicProfile | search | messages
-  const [view, setView] = useState("feed");
+ const [view, setView] = useState("feed"); // feed | profile | publicProfile | search
+
 
   const [highlights, setHighlights] = useState([]);
   const [highlightTitle, setHighlightTitle] = useState("");
@@ -1219,6 +1695,31 @@ function App() {
 
   const [allProfiles, setAllProfiles] = useState([]);
   const [messages, setMessages] = useState([]);
+
+  const [favorites, setFavorites] = useState([]); // array of profile IDs
+const [savedSearches, setSavedSearches] = useState([]); // array of {id, label, query, position, nationality}
+
+  // ---------- SUPABASE CONNECTION TEST ----------
+  useEffect(() => {
+    async function testSupabase() {
+      try {
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("*")
+          .limit(1);
+
+        if (error) {
+          console.error("Supabase TEST error:", error);
+        } else {
+          console.log("Supabase TEST success. Example row:", data?.[0]);
+        }
+      } catch (err) {
+        console.error("Supabase TEST fatal error:", err);
+      }
+    }
+
+    testSupabase();
+  }, []);
 
 // ---------- AUTH ----------
 async function signIn(email, password) {
@@ -1339,6 +1840,43 @@ async function signOut() {
     }
   }
 
+  // ---------- SEARCH HELPERS (favorites + saved searches) ----------
+function toggleFavorite(profileId) {
+  setFavorites((prev) =>
+    prev.includes(profileId)
+      ? prev.filter((id) => id !== profileId)
+      : [...prev, profileId]
+  );
+}
+
+function saveSearch(search) {
+  const { query, position, nationality } = search;
+
+  // Don't save completely empty filters
+  if (!query && !position && !nationality) return;
+
+  const parts = [];
+  parts.push(query || "All players");
+  if (position) parts.push(position);
+  if (nationality) parts.push(nationality);
+  const label = parts.join(" • ");
+
+  setSavedSearches((prev) => [
+    {
+      id: Date.now(),
+      label,
+      query: query || "",
+      position: position || "",
+      nationality: nationality || "",
+    },
+    ...prev,
+  ]);
+}
+
+function deleteSearch(id) {
+  setSavedSearches((prev) => prev.filter((s) => s.id !== id));
+}
+
   // ---------- POSTS ----------
   async function fetchPosts() {
     const { data, error } = await supabase
@@ -1424,6 +1962,60 @@ async function signOut() {
     }
   }
 
+    // ---------- MESSAGES (SUPABASE-BACKED) ----------
+  async function fetchMessages() {
+    if (!session?.user) return;
+    const userId = session.user.id;
+
+    const { data, error } = await supabase
+      .from("messages")
+      .select("*")
+      .or(`from_id.eq.${userId},to_id.eq.${userId}`)
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      console.error("Error loading messages:", error);
+    } else {
+      setMessages(data || []);
+    }
+  }
+
+  async function sendMessage(toId, text) {
+    if (!session?.user || !toId || !text.trim()) return;
+
+    const userId = session.user.id;
+
+    // Optimistic local update (instant UI)
+    const tempMessage = {
+      id: Date.now(), // temp local id
+      from_id: userId,
+      to_id: toId,
+      text: text.trim(),
+      created_at: new Date().toISOString(),
+    };
+    setMessages((prev) => [...prev, tempMessage]);
+
+    const { data, error } = await supabase
+      .from("messages")
+      .insert({
+        from_id: userId,
+        to_id: toId,
+        text: text.trim(),
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Error sending message:", error);
+      // Optional: rollback or show toast
+    } else if (data) {
+      // Replace the temp message with real one
+      setMessages((prev) => {
+        return [...prev.filter((m) => m !== tempMessage), data];
+      });
+    }
+  }
+
   // ---------- PUBLIC PROFILE ----------
   async function fetchPublicProfileData(userId) {
     const { data: p, error: pErr } = await supabase
@@ -1490,25 +2082,73 @@ async function signOut() {
   init();
 }, [forceLoggedOut]);
 
+useEffect(() => {
+  if (session?.user && !forceLoggedOut) {
+    // These should already exist in your App:
+    fetchProfile();
+    fetchPosts();
+    fetchHighlights();
+    fetchAllProfiles();
+    fetchMessages();  // 👉 new
+  } else if (!session?.user) {
+    // Optional: clear state when logged out
+    setProfile(null);
+    setPosts([]);
+    setHighlights([]);
+    setAllProfiles([]);
+    setMessages([]);
+  }
+}, [session, forceLoggedOut]);
+
+// Load favorites & saved searches from localStorage on first load
+useEffect(() => {
+  try {
+    const favRaw = window.localStorage.getItem("sl_favorites");
+    if (favRaw) {
+      setFavorites(JSON.parse(favRaw));
+    }
+    const searchRaw = window.localStorage.getItem("sl_saved_searches");
+    if (searchRaw) {
+      setSavedSearches(JSON.parse(searchRaw));
+    }
+  } catch (e) {
+    console.warn("Could not load saved favorites/searches", e);
+  }
+}, []);
+
+// Persist favorites & saved searches whenever they change
+useEffect(() => {
+  try {
+    window.localStorage.setItem("sl_favorites", JSON.stringify(favorites));
+    window.localStorage.setItem(
+      "sl_saved_searches",
+      JSON.stringify(savedSearches)
+    );
+  } catch (e) {
+    console.warn("Could not save favorites/searches", e);
+  }
+}, [favorites, savedSearches]);
+
+
 
   // ---------- RENDER ----------
- if (loading) {
-  return (
-    <div style={styles.page}>
-      <h2>Loading...</h2>
-    </div>
-  );
-}
+  if (loading) {
+    return (
+      <div style={styles.page}>
+        <h2>Loading...</h2>
+      </div>
+    );
+  }
 
-if (!session || forceLoggedOut) {
-  return (
-    <AuthScreen
-      signIn={signIn}
-      signUp={signUp}
-      resetPassword={resetPassword}
-    />
-  );
-}
+  if (!session || forceLoggedOut) {
+    return (
+      <AuthScreen
+        signIn={signIn}
+        signUp={signUp}
+        resetPassword={resetPassword}
+      />
+    );
+  }
 
   const currentUserId = session.user.id;
 
@@ -1598,7 +2238,7 @@ if (!session || forceLoggedOut) {
             profiles={allProfiles}
             currentUserId={currentUserId}
             messages={messages}
-            setMessages={setMessages}
+            onSendMessage={sendMessage}
           />
         )}
       </div>
